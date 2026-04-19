@@ -1,0 +1,5 @@
+# Proprietary vendor software
+*.exe
+
+# Claude Code session data
+.claude/
