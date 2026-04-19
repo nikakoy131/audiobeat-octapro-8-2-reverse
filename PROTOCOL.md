@@ -110,26 +110,53 @@ Checksum table:
 
 ## CMD 0x0a — WRITE_DSP (real-time parameter write)
 
+Full 16-byte layout (verified by checksum analysis):
+
 ```
-e0 a2 0a 00  ADDR_LO ADDR_HI  SUB  DATA[5]  CSUM  ?? ?? ??
+[0]     0xe0
+[1]     0xa2
+[2]     0x0a        CMD
+[3]     0x00
+[4:6]   ADDR        channel base address, uint16 LE  (CHn = 0x00b7 + n*0x0100)
+[6]     SUB         parameter index within the channel block
+[7:11]  float32 LE  parameter value
+[11]    PARAM_BYTE  slope code (HPF) or gain byte (GAIN)
+[12]    TYPE_BYTE   parameter qualifier: 0x00=HPF, 0x0a=GAIN
+[13]    CSUM        checksum = (sum(pkt[4:13]) - 0x20) & 0xFF
+[14]    0x00
+[15]    0x10
 ```
 
-DATA[5] = float32 LE (4 bytes) + 1 extra byte.
+**CSUM for 0x0a is at byte [13], NOT byte [8] like other commands.**
 
-### Known parameter addresses
+### Channel base address formula
 
-| ADDR   | SUB  | Parameter | Data encoding |
-|--------|------|-----------|---------------|
-| 0x07b7 | 0x05 | HPF frequency (CH7+CH8 sub) | float32 Hz + slope byte |
-| 0x09b7 | 0x26 | Channel GAIN | float32 ref + gain byte |
+`ADDR = 0x00b7 + channel_number × 0x0100`
 
-**Address spacing:** 0x09b7 - 0x07b7 = 0x200 = 512. This is the ADAU1452 parameter RAM stride between channel blocks.
+| CH | ADDR   |   | CH | ADDR   |
+|----|--------|---|----|--------|
+|  1 | 0x01b7 |   |  6 | 0x06b7 |
+|  2 | 0x02b7 |   |  7 | 0x07b7 |
+|  3 | 0x03b7 |   |  8 | 0x08b7 |
+|  4 | 0x04b7 |   |  9 | 0x09b7 |
+|  5 | 0x05b7 |   | 10 | 0x0ab7 |
 
-### HPF frequency example (sub channels 7+8, 36 dB/oct):
+> **Correction from earlier docs:** The stride is **0x0100** (256) per channel,
+> not 0x0200. The apparent 0x200 difference between 0x07b7 and 0x09b7 is because
+> those examples happened to use CH7 and CH9 (two channels apart).
 
-```python
-struct.pack('<f', 20.1) + bytes([0x05])  # slope code 0x05 = 36dB/oct?
-```
+### Known parameter sub-addresses
+
+| SUB  | TYPE_BYTE | Parameter    | PARAM_BYTE meaning  | float32 meaning |
+|------|-----------|--------------|---------------------|-----------------|
+| 0x05 | 0x00      | HPF frequency | slope code          | frequency Hz    |
+| 0x26 | 0x0a      | Channel GAIN  | gain byte           | 20000.0 (ref)   |
+
+Slope codes (byte after float32):
+- `0x05` = 36 dB/oct (confirmed in CH7 captures)
+- `0x03` = 12 dB/oct (seen in CH1, CH5 readback)
+
+### HPF frequency example (CH7, 36 dB/oct):
 
 ```
 e0 a2 0a 00 b7 07 05 cd cc a0 41 05 00 22 00 10  (HPF=20.1 Hz)
@@ -137,7 +164,13 @@ e0 a2 0a 00 b7 07 05 9a 99 a1 41 05 00 bd 00 10  (HPF=20.2 Hz)
 e0 a2 0a 00 b7 07 05 04 00 b0 41 05 00 9d 00 10  (HPF=22.0 Hz)
 ```
 
-### Channel GAIN example:
+Byte map for first packet:
+```
+e0 a2 0a 00 | b7 07 | 05 | cd cc a0 41 | 05 | 00 | 22 | 00 10
+  magic       addr    sub   float=20.1   slp  typ  csum tail
+```
+
+### Channel GAIN example (CH9):
 
 ```
 e0 a2 0a 00 b7 09 26 00 40 9c 46 79 0a 6b 00 10  (gain=+0.1 dB)
@@ -146,14 +179,11 @@ e0 a2 0a 00 b7 09 26 00 40 9c 46 dc 0a ce 00 10  (gain=+10.0 dB)
 
 Gain byte encoding: `gain_dB = (byte - 0x78) / 10.0`
 
-| byte | dB |
-|------|----|
-| 0x80 | -inf (mute) |
-| 0x78 | 0.0 |
-| 0x6e | -1.0 |
-| 0x5a | -3.0 |
-| 0x88 | +1.6 |
-| 0xdc | +10.0 |
+| byte | dB      |   | byte | dB     |
+|------|---------|---|------|--------|
+| 0x80 | -inf (mute) | | 0x78 | 0.0  |
+| 0x6e | -1.0    |   | 0x88 | +1.6   |
+| 0x5a | -3.0    |   | 0xdc | +10.0  |
 
 ---
 
@@ -196,44 +226,81 @@ e0 a2 04 00  b0 00  REG_LO REG_HI  CSUM  DATA...
 
 ---
 
-## .dat Preset File Format (US002)
+## Channel Data Block Layout
+
+Used in both the **USB channel readback** (CMD 0x05 response) and the **.dat preset file**.
+
+### USB channel readback (CMD 0x05 response data, 242 bytes after 8-byte IN header)
+
+```
+[0]      prefix byte (0x00)
+[1:33]   routing matrix — 32 bytes (same as .dat [0:32])
+[33:39]  unknown (6 bytes, typically zeros)
+[39:43]  float32 LE  HPF frequency (Hz)
+[43]     HPF slope code  (0x05=36dB/oct, 0x03=12dB/oct)
+[44]     unknown (0x00)
+[45:49]  float32 LE  LPF frequency (Hz)   20600.0 = bypass
+[49]     LPF slope code  (0x03 observed)
+[50:52]  unknown flags (2 bytes)
+[52]     EQ section marker (0x06)
+[53:239] EQ data — 31 bands × 6 bytes each
+[239]    trailing byte (varies per channel)
+[240:242] padding zeros
+```
+
+### .dat Preset File Format (US002)
 
 ```
 Header: "US002" (5 bytes ASCII)
-Body:   10 × 290 bytes  (one block per channel)
-        = 52 bytes channel header
-        + 238 bytes EQ data (16 bands)
+Body:   10 × 238 bytes  (one block per channel, stride confirmed)
 ```
 
-### Channel Header (52 bytes)
+> **Correction from earlier docs:** Block size is **238 bytes** (not 290), giving
+> 5 + 10×238 = 2385 bytes (file is 2387 bytes with 2-byte terminator).
+
+### .dat Channel Block (238 bytes)
 
 ```
-[0:32]   Routing matrix — 8 × 4 bytes
-         Each byte = gain:  signed_value / 10.0 dB
+[0:32]   Routing matrix — 32 bytes
+         Each byte = signed int8 gain / 10.0 dB
            0x80 = -inf (mute)     0x78 = 0.0 dB
            0xe4 = -2.8 dB         0x64 = +10.0 dB
            0xb2 = -7.8 dB
 
-[32:36]  float32  HPF frequency (Hz)
-[36:40]  float32  ? (Q or slope)
-[40:44]  ?
-[44:48]  float32  LPF frequency (Hz)   20600.0 = bypass
-[48:52]  flags    03 01 00 06 = fullrange
-                  03 00 00 06 = limited
-                  03 00 00 03 = sub
+[32:38]  unknown (6 bytes)
+[38:42]  float32  HPF frequency (Hz)     [USB: cd[39:43]]
+[42]     HPF slope code
+[43]     unknown
+[44:48]  float32  LPF frequency (Hz)   20600.0 = bypass  [USB: cd[45:49]]
+[48]     LPF slope code
+[49:52]  unknown flags
+
+[52]     EQ section marker (0x06)
+[52:238] EQ data — 31 bands × 6 bytes each  [USB: cd[53:239]]
 ```
 
-### EQ Block (238 bytes) — 16 bands
+### EQ Band structure (6 bytes × 31 bands)
 
-Each band ~14 bytes:
+31 bands, 1/3-octave from 20 Hz to 20 kHz:
+
 ```
-[0:4]   float32  center frequency (Hz)
-[4]     gain byte: (byte - 0x78) / 10.0 dB
-[5]     0x78  separator
-[6]     Q byte (TBD)
-[7]     0x0a  separator
-[8:14]  tail / overlap
+[0:4]   float32 LE  center frequency (Hz)
+[4]     gain byte: (byte - 0x78) / 10.0 dB  (same encoding as GAIN command)
+[5]     Q byte  (0x0a = default Q; first band may differ)
 ```
+
+Band center frequencies (confirmed from readback):
+
+| # | Hz   | # | Hz   | # | Hz    | # | Hz    |
+|---|------|---|------|---|-------|---|-------|
+| 1 | 20   | 9 | 125  |17 | 800   |25 | 5000  |
+| 2 | 25   |10 | 160  |18 | 1000  |26 | 6300  |
+| 3 | 31.5 |11 | 200  |19 | 1250  |27 | 8000  |
+| 4 | 40   |12 | 250  |20 | 1600  |28 | 10000 |
+| 5 | 50   |13 | 315  |21 | 2000  |29 | 12500 |
+| 6 | 63   |14 | 400  |22 | 2500  |30 | 16000 |
+| 7 | 80   |15 | 500  |23 | 3150  |31 | 20000 |
+| 8 | 100  |16 | 630  |24 | 4000  |   |       |
 
 ### Channel layout (from dsp_m2.dat)
 
@@ -336,14 +403,56 @@ if __name__ == '__main__':
 
 ---
 
+## CMD 0x05 — DSP Channel Trigger (addr=0xNNb7, sub=0x01)
+
+Distinct from the channel readback command. Sends to per-channel DSP base addresses:
+
+```
+OUT: e0 a2 05 00  NNb7  01 00  CS  data...
+```
+
+Returns `02 00 ee bb 00...` (status=0x0002, magic=eebb, no payload). Appears after
+groups of WRITE_DSP (0x0a) commands, once per modified channel. Likely a
+**"commit / notify DSP" trigger** — telling the MCU to apply buffered parameter
+changes to that channel's DSP block. Requires further confirmation.
+
+---
+
+## IN Response Status Codes
+
+| STATUS (LE) | magic  | Meaning / trigger command |
+|-------------|--------|---------------------------|
+| 0x0002      | `eebb` | Acknowledged, no data (CMD 0x08, 0x1c, CMD 0x05 DSP trigger) |
+| 0x000f      | `e0a2` | Keepalive ack (CMD 0x04 reg=0xa515) |
+| 0x002f      | `e0a2` | Short info response (CMD 0x04 reg=0x9909, dlen=43) |
+| 0x006a      | `e0a2` | Firmware string response (CMD 0x04 reg=0x80f0, dlen=102) |
+| 0x008d      | `e0a2` | Master channel (CH0) read (dlen=137) |
+| 0x00f6      | `e0a2` | Full channel read (CMD 0x05 reg=0x04/CHn, dlen=242) |
+
+Magic `eebb` (= 0xbbee LE) is returned for any command the device acknowledges
+without returning a data payload. It does **not** mean "not connected" in all cases —
+only the initial status check (`CMD 0x05 addr=0x00b7 sub=0x03`) uses it as a
+disconnected-device indicator.
+
+---
+
+## Keepalive Echo Behaviour
+
+After the first WRITE_DSP (0x0a) write, the keepalive payload `d[9:16]` echoes
+the last written parameter's data bytes (same bytes as 0x0a `d[9:16]`). The echo
+persists in every subsequent keepalive until the next write.
+
+---
+
 ## Still Unknown
 
-- Exact parameter RAM layout for all 10 channels (need more captures with different params)
-- LPF write command address (expected near 0x07b7/0x09b7)
-- EQ band gain/Q write addresses
+- LPF write command (expected: addr=0xNNb7, sub=?, TYPE_BYTE=?)
+- EQ band gain/Q write addresses and TYPE_BYTE values
 - MUTE, SOLO, phase invert, bridge commands
 - Delay (time alignment) commands
-- Preset save (M1..Mx) commands
+- Preset save/load (M1..Mx) commands
 - Routing matrix write commands
-- Meaning of cmd 0x08 and 0x1c in handshake
-- What extra bytes [14:16] encode (seen as `00 10` always in 0x0a)
+- Exact meaning of cmd 0x08 (observed at handshake and between parameter sessions — possible "sync/flush")
+- Exact meaning of cmd 0x1c (addr=0x00b7, sub=0x21 — observed once in handshake, once in session)
+- Routing matrix byte layout (32 bytes, signed int8 per output, but exact input/output mapping unclear)
+- Q byte encoding (0x0a default; first EQ band uses different value e.g. 0x2b, 0x15)
