@@ -120,6 +120,38 @@ See `CONTEXT_USER.md → Still to Capture` for the priority-ordered list. High-p
 - MUTE, phase, delay, preset save/load
 - Slope code `0x01` meaning (seen on CH3/4 HPF in dsp_m2.dat)
 
+## Analysis Tools (installed on this machine)
+
+### System tools
+| Tool | Location | Use |
+|------|----------|-----|
+| `tshark` | `/usr/bin/tshark` | CLI PCAP dissection — primary PCAP tool |
+| `radare2` / `r2` | `/usr/bin/radare2` | Disassembly, binary patching, scripting |
+| `ghidra` | `/snap/bin/ghidra` | Decompiler — best for finding undiscovered HID commands in the EXE |
+| `binwalk` | `/usr/bin/binwalk` | Entropy map, detect compressed/embedded sections in the EXE |
+| `7z` | `/usr/bin/7z` | Unpack NSIS/Inno Setup installers to extract embedded DAT/config files |
+| `wine` | `/usr/bin/wine` | Run the Windows config EXE to generate live USB traffic for capture |
+| `strings` | `/usr/bin/strings` | Quick string scan of the binary |
+| `xxd` / `hexdump` | `/usr/bin/` | Raw hex inspection |
+| `foremost` | `/usr/bin/foremost` | File carving from raw binary dumps |
+| `yara` | `/usr/bin/yara` | Pattern rules — scan for HID magic bytes (`e0 a2`) across the binary |
+| `jq` | `/usr/bin/jq` | Query `research.jsonl` |
+
+### Python libraries (in project venv)
+| Library | Use |
+|---------|-----|
+| `pefile` | Parse PE headers, import table, resources from the Windows EXE |
+| `scapy` | Scriptable PCAP parsing as an alternative to tshark |
+| `capstone` | Disassembly engine callable from Python scripts |
+
+### Recommended workflow for EXE analysis
+1. `7z l <setup.exe>` — check if it's a self-extracting installer; unpack with `7z x`
+2. `binwalk <app.exe>` — entropy map to find compressed/encrypted sections
+3. `strings <app.exe> | grep -iE "hid|usb|0x|e0a2"` — quick string pass
+4. `pefile` (Python) — dump imports, section names, embedded resources
+5. `ghidra` — decompile to C pseudocode; search for HID `WriteFile`/`HidD_SetOutputReport` calls to find command-building functions
+6. `yara` — write a rule for the `e0 a2` HID magic and scan the binary + memory dumps
+
 ## Useful tshark One-Liners
 
 ```bash
