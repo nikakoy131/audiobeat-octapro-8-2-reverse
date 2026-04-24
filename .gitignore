@@ -3,3 +3,32 @@
 
 # Claude Code session data
 .claude/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# uv
+uv.lock
+
+# Type checking / linting caches
+.mypy_cache/
+.ruff_cache/
+
+# Test output
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editor
+.idea/
+.vscode/
+*.swp
