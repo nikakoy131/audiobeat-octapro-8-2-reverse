@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # required for hatch-vcs tag resolution
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install system deps (Linux — needed by hid/cython-hidapi)
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y libhidapi-dev
+
+      - name: Install system deps (macOS — needed by hid/cython-hidapi)
+        if: runner.os == 'macOS'
+        run: brew install hidapi
+
+      - name: Install Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install dependencies (including dev)
+        run: uv sync
+
+      - name: Lint (ruff)
+        run: uv run ruff check src tests
+
+      - name: Type check (mypy)
+        run: uv run mypy src
+
+      - name: Test (pytest)
+        run: uv run pytest -v
