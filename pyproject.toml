@@ -13,6 +13,9 @@ dependencies = [
     "typer[all]>=0.12",
     "rich>=13",
     "hid>=0.14.0",
+    "pefile>=2024.8.26",
+    "scapy>=2.7.0",
+    "capstone>=5.0.7",
 ]
 
 [project.scripts]

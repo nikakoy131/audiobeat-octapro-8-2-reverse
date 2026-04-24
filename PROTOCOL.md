@@ -446,13 +446,41 @@ persists in every subsequent keepalive until the next write.
 
 ## Still Unknown
 
+See `FINDINGS_MANUAL_GAP.md` for the full manual-vs-known gap and priority
+capture plan. High-level outstanding items:
+
 - LPF write command (expected: addr=0xNNb7, sub=?, TYPE_BYTE=?)
 - EQ band gain/Q write addresses and TYPE_BYTE values
 - MUTE, SOLO, phase invert, bridge commands
 - Delay (time alignment) commands
-- Preset save/load (M1..Mx) commands
+- Preset save/load (M1..M6) commands — app has 16 scene slots, device manual says 6
 - Routing matrix write commands
-- Exact meaning of cmd 0x08 (observed at handshake and between parameter sessions — possible "sync/flush")
-- Exact meaning of cmd 0x1c (addr=0x00b7, sub=0x21 — observed once in handshake, once in session)
+- Speaker-type write (candidate: application-level type enum 0x1a, count=6, payload 0x01..0x06 for HF/MF/LF/MHF/MLF/FF — see EXE static analysis)
+- Exact meaning of cmd 0x08 (sub=0x0206 vs 0x8206 — two variants, both carry a bit-doubling data pattern)
+- Exact meaning of cmd 0x1c (addr=0x00b7, sub=0x0121 — handshake; payload is the same bit-doubling pattern)
+- Main volume write — keepalive **response** already echoes its float32 value; write command probably reuses CMD 0x04 SUB 0xa515 with a float in the data slot
 - Routing matrix byte layout (32 bytes, signed int8 per output, but exact input/output mapping unclear)
 - Q byte encoding (0x0a default; first EQ band uses different value e.g. 0x2b, 0x15)
+
+### Confirmed response status codes (from `scripts/pair_pcap_requests_responses.py`)
+
+| Status (LE, bytes 0..1 of IN payload) | `dlen` | Returned for |
+|---------------------------------------|--------|--------------|
+| `0f 00` (0x000f) | 11 B  | keepalive (CMD 0x04 SUB 0xa515) — payload echoes main-volume float32 |
+| `2f 00` (0x002f) | 43 B  | handshake init (CMD 0x04 SUB 0x9909) — short firmware string |
+| `6a 00` (0x006a) | 102 B | firmware query (CMD 0x04 SUB 0x80f0) |
+| `8d 00` (0x008d) | 137 B | master-channel read (CMD 0x05 SUB 0x0004) |
+| `f6 00` (0x00f6) | 242 B | per-channel read (CMD 0x05 SUB 0xNN04) |
+
+### CMD 0x05 commit trigger — two variants observed
+
+After a WRITE_DSP batch, the UI sends `CMD 0x05 addr=0xNNb7` with SUB in two
+forms: `0x0001` (REG_HI=0x00) and `0x0101` (REG_HI=0x01). Both clear the DSP
+buffer, but why two flavors exist is unclear — usb2 sent `0x0001` on channels
+that had **not** been written in the same capture, suggesting the address field
+tracks the currently selected UI channel rather than the write target.
+
+### Full unique command catalog from captures
+
+See `FINDINGS_MANUAL_GAP.md` → "Pcap findings" for the table of all 55 unique
+(CMD, ADDR, SUB) signatures seen across `usb1.pcapng` + `usb2.pcapng`.
