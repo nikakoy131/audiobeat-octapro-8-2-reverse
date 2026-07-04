@@ -199,6 +199,19 @@ def read_master(
     sys.exit(run_read_master(no_keepalive=no_keepalive))
 
 
+@read_app.command(name="volume")
+def read_volume(
+    no_keepalive: _NoKA = False,
+    verbose: _Verbose = False,
+    quiet: _Quiet = False,
+    log_file: _LogFile = None,
+) -> None:
+    """Read the main volume (decoded from the keepalive response)."""
+    _setup(verbose, quiet, log_file)
+    from octapro.commands.read import run_read_volume
+    sys.exit(run_read_volume(no_keepalive=no_keepalive))
+
+
 # ---------------------------------------------------------------------------
 # dump sub-app
 # ---------------------------------------------------------------------------
