@@ -9,6 +9,8 @@ from octapro.protocol.constants import (
     CMD_WRITE_DSP,
     KNOWN_STATUSES,
     REG_KEEPALIVE,
+    SESSION_OPEN_ADDR,
+    SUB_SESSION_OPEN,
     WRITE_DSP_TRAILER,
 )
 
@@ -57,8 +59,12 @@ def build_write_param(addr: int, reg: int, csum: int | None = None) -> bytearray
 
 
 def build_read_channel(ch: int) -> bytearray:
-    """CMD 0x05 READ_BLOCK. ch=0 reads master; ch=1..10 reads DSP channels."""
-    pkt = _base_packet(0x05, 0x00B0, (0x04 << 8) | ch)
+    """CMD 0x05 READ_BLOCK. ch=0 reads master; ch=1..10 reads DSP channels.
+
+    Wire bytes at [6:8] are 04 <ch> (usb1.pcapng frame 119) — as a LE u16
+    sub that is (ch << 8) | 0x04; the device refuses the swapped form.
+    """
+    pkt = _base_packet(0x05, 0x00B0, (ch << 8) | 0x04)
     pkt[8] = 0x94 + ch  # observed magic from captures
     return pkt
 
@@ -96,6 +102,17 @@ def build_dsp_commit(ch: int) -> bytearray:
 
 def build_keepalive() -> bytearray:
     return build_write_param(0x00B0, REG_KEEPALIVE, csum=0x94)
+
+
+def build_session_open() -> bytearray:
+    """CMD 0x05 addr=0x00b7 sub=0x1103 — first packet the vendor app sends.
+
+    Without it the device answers READ_BLOCK with a short ee55 refusal ACK
+    instead of the channel block (verified against live device).
+    """
+    pkt = _base_packet(0x05, SESSION_OPEN_ADDR, SUB_SESSION_OPEN)
+    pkt[8] = compute_checksum(pkt)
+    return pkt
 
 
 # ---------------------------------------------------------------------------

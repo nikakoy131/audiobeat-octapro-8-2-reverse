@@ -31,10 +31,22 @@ Transfer type: **HID CONTROL** (not Interrupt!)
 
 | Direction | bmRequestType | bRequest | wValue | wIndex | wLength |
 |-----------|--------------|----------|--------|--------|---------|
-| OUT (host→device) | 0x21 | 0x09 SET_REPORT | 0x0002 | 0x0004 | 256 |
-| IN  (device→host) | 0xa1 | 0x01 GET_REPORT | 0x0002 | 0x0004 | 256 |
+| OUT (host→device) | 0x21 | 0x09 SET_REPORT | 0x0200 (Output, report ID 0) | 0x0004 | 256 |
+| IN  (device→host) | 0xa1 | 0x01 GET_REPORT | 0x0100 (Input, report ID 0) | 0x0004 | 256 |
 
 SETUP (8 bytes) + 256-byte payload = 264 bytes per transaction.
+
+The protocol lives on **interface 4** (wIndex=4), a HID-class interface with
+**no interrupt endpoints** — non-compliant per the HID spec, so OS HID stacks
+do not bind to it (on macOS it does not exist as a HID device at all; hidapi
+only sees interface 3, the media-key remote). Talk to it with **libusb**
+(pyusb), claiming the unclaimed interface 4 and issuing the two control
+transfers above per transaction. Verified live on macOS 2026-07-04, firmware
+`A239-A-DP603-U5.6-250110-DSP1452-BMP885`.
+
+Full interface map: 0 = audio control, 1/2 = audio streaming (USB Audio),
+3 = HID consumer-control (volume/track/mute remote, 1-byte input report),
+4 = HID DSP command channel (this protocol).
 
 ---
 
@@ -204,9 +216,11 @@ e0 a2 04 00  b0 00  REG_LO REG_HI  CSUM  DATA...
 ## Handshake Sequence
 
 ```
-1. Check status:
+1. Session open (MANDATORY — device refuses channel reads until sent):
    OUT: e0 a2 05 00 b7 00 03 11 ab 00...
-   IN:  02 00 ee bb 00...   (0xbbee = not connected)
+   IN:  02 00 ee bb 00...
+   Without this packet READ_BLOCK answers with a short refusal ACK
+   `02 00 ee 55` instead of the channel block (verified on live device).
 
 2. Init param:
    OUT: e0 a2 04 00 b0 00 09 99 ab 00...
@@ -319,41 +333,55 @@ Band center frequencies (confirmed from readback):
 
 ---
 
-## macOS Client (hidapi)
+## Reference Client (pyusb)
+
+hidapi **cannot** be used: the DSP interface (4) has no interrupt endpoints,
+so the OS HID stack never exposes it (see *USB Transport*). This pyusb client
+is verified against a live device:
 
 ```python
-import hid, struct
+import struct
+import usb.core, usb.util
 
-VID, PID = 0x8888, 0x1234
+VID, PID, INTERFACE = 0x8888, 0x1234, 4
 
 def open_device():
-    dev = hid.device()
-    dev.open(VID, PID)
+    dev = usb.core.find(idVendor=VID, idProduct=PID)
+    assert dev, "device not connected"
+    try:
+        if dev.is_kernel_driver_active(INTERFACE):
+            dev.detach_kernel_driver(INTERFACE)     # Linux
+    except NotImplementedError:
+        pass                                        # macOS: unclaimed anyway
+    usb.util.claim_interface(dev, INTERFACE)
+    transact(dev, make_cmd(0x05, 0x00b7, 0x1103))   # mandatory session open
     return dev
 
-def send_ctrl(dev, payload: bytes):
+def transact(dev, payload: bytes) -> bytes:
     assert len(payload) == 256
-    dev.write(bytes([0x00]) + payload)   # report ID 0
+    dev.ctrl_transfer(0x21, 0x09, 0x0200, INTERFACE, payload, timeout=1000)
+    return bytes(dev.ctrl_transfer(0xA1, 0x01, 0x0100, INTERFACE, 256, timeout=1000))
 
-def recv_ctrl(dev) -> bytes:
-    return bytes(dev.read(256, timeout_ms=500))
-
-def checksum_0a(pkt: bytearray) -> int:
-    """pkt must have addr[4:6], sub[6], data[7:12] filled"""
+def checksum(pkt) -> int:
     return (sum(pkt[4:13]) - 0x20) & 0xFF
 
-def make_cmd(cmd, addr, reg, csum=0xab):
+def make_cmd(cmd, addr, sub, csum=None):
     pkt = bytearray(256)
     pkt[0]=0xe0; pkt[1]=0xa2; pkt[2]=cmd; pkt[3]=0x00
     struct.pack_into('<H', pkt, 4, addr)
-    struct.pack_into('<H', pkt, 6, reg)
-    pkt[8] = csum
-    return pkt
+    struct.pack_into('<H', pkt, 6, sub)
+    pkt[8] = checksum(pkt) if csum is None else csum
+    return bytes(pkt)
 
 def read_channel(dev, ch: int) -> bytes:
-    pkt = make_cmd(0x05, 0x00b0, (0x04 << 8) | ch, csum=0x94+ch)
-    send_ctrl(dev, bytes(pkt))
-    return recv_ctrl(dev)
+    # wire bytes [6:8] = 04 CH  ->  LE u16 sub = (CH << 8) | 0x04
+    return transact(dev, make_cmd(0x05, 0x00b0, (ch << 8) | 0x04, csum=0x94+ch))
+
+def get_firmware(dev) -> str:
+    r = transact(dev, make_cmd(0x04, 0x00b0, 0x80f0))
+    s = r[10:80]                      # printable ASCII banner starts at [10]
+    end = next((i for i, b in enumerate(s) if not 0x20 <= b <= 0x7e), len(s))
+    return s[:end].decode()
 
 def write_hpf(dev, addr: int, freq_hz: float, slope_code: int = 0x05):
     """Write HPF frequency. slope_code 0x05 observed for 36dB/oct."""
@@ -364,9 +392,8 @@ def write_hpf(dev, addr: int, freq_hz: float, slope_code: int = 0x05):
     struct.pack_into('<f', pkt, 7, freq_hz)
     pkt[11] = slope_code
     pkt[12] = 0x00
-    pkt[13] = checksum_0a(pkt)
-    send_ctrl(dev, bytes(pkt))
-    return recv_ctrl(dev)
+    pkt[13] = checksum(pkt)
+    return transact(dev, bytes(pkt))
 
 def write_gain(dev, addr: int, gain_db: float):
     """gain_db in range -12.8..+12.7 (limited by byte encoding)"""
@@ -378,19 +405,11 @@ def write_gain(dev, addr: int, gain_db: float):
     struct.pack_into('<f', pkt, 7, 20000.0)   # fixed reference
     pkt[11] = gain_byte
     pkt[12] = 0x0a
-    pkt[13] = checksum_0a(pkt)
-    send_ctrl(dev, bytes(pkt))
-    return recv_ctrl(dev)
-
-def get_firmware(dev) -> str:
-    pkt = make_cmd(0x04, 0x00b0, 0x80f0)
-    send_ctrl(dev, bytes(pkt))
-    r = recv_ctrl(dev)
-    return r[9:50].decode('ascii', errors='replace').rstrip('\x00')
+    pkt[13] = checksum(pkt)
+    return transact(dev, bytes(pkt))
 
 def keepalive(dev):
-    pkt = make_cmd(0x04, 0x00b0, 0xa515, csum=0x94)
-    send_ctrl(dev, bytes(pkt))
+    transact(dev, make_cmd(0x04, 0x00b0, 0xa515, csum=0x94))
 
 if __name__ == '__main__':
     dev = open_device()
@@ -398,7 +417,8 @@ if __name__ == '__main__':
     for ch in range(11):
         d = read_channel(dev, ch)
         print(f'CH{ch}: {d[:16].hex()}')
-    dev.close()
+    usb.util.release_interface(dev, INTERFACE)
+    usb.util.dispose_resources(dev)
 ```
 
 ---
@@ -423,6 +443,7 @@ changes to that channel's DSP block. Requires further confirmation.
 | STATUS (LE) | magic  | Meaning / trigger command |
 |-------------|--------|---------------------------|
 | 0x0002      | `eebb` | Acknowledged, no data (CMD 0x08, 0x1c, CMD 0x05 DSP trigger) |
+| 0x0002      | `ee55` | Refused — READ_BLOCK before session open, or malformed SUB bytes (live-verified) |
 | 0x000f      | `e0a2` | Keepalive ack (CMD 0x04 reg=0xa515) |
 | 0x002f      | `e0a2` | Short info response (CMD 0x04 reg=0x9909, dlen=43) |
 | 0x006a      | `e0a2` | Firmware string response (CMD 0x04 reg=0x80f0, dlen=102) |

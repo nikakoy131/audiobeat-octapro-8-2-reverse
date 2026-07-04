@@ -34,7 +34,13 @@ def run_info(no_keepalive: bool = False) -> int:
             log_packet_out(0x04, 0x00B0, REG_FIRMWARE, bytes(pkt))
             resp = t.transact(bytes(pkt))
             log_packet_in(resp)
-            firmware = resp[9:60].decode("ascii", errors="replace").rstrip("\x00").strip()
+            # banner is printable ASCII starting at [10], terminated by control bytes
+            raw_banner = resp[10:80]
+            end = next(
+                (i for i, b in enumerate(raw_banner) if not 0x20 <= b <= 0x7E),
+                len(raw_banner),
+            )
+            firmware = raw_banner[:end].decode("ascii").strip()
             research("version_banner", firmware=firmware, app_version=__version__)
             log.info("Firmware: %s", firmware)
 

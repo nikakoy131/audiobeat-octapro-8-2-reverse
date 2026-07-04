@@ -1,7 +1,14 @@
-"""HID transport layer wrapping cython-hidapi.
+"""Transport layer for the OctaPro DSP command interface.
 
-All send+recv operations go through `transact()`, which holds a lock to prevent
-the keepalive thread from interleaving with command reads.
+The device is a composite USB device; the DSP protocol lives on HID
+interface 4, which has *no interrupt endpoints* — every exchange is a pair
+of control transfers (SET_REPORT out, GET_REPORT in), exactly as seen in
+the vendor captures (usb1.pcapng frames 107/109). Because the interface is
+not HID-compliant, the OS HID stack does not bind to it (hidapi cannot see
+it at all on macOS), so we drive it directly with libusb via pyusb.
+
+All send+recv operations go through `transact()`, which holds a lock to
+prevent the keepalive thread from interleaving with command reads.
 """
 
 import logging
@@ -10,12 +17,20 @@ from typing import Any
 
 from octapro.errors import DeviceNotFound, TransportTimeout
 from octapro.protocol.constants import KEEPALIVE_INTERVAL_S, PID, VID
-from octapro.protocol.packet import build_keepalive
+from octapro.protocol.packet import build_keepalive, build_session_open
 
 log = logging.getLogger("octapro.transport")
 
-_REPORT_ID = 0x00
-_READ_TIMEOUT_MS = 500
+_INTERFACE = 4
+_TIMEOUT_MS = 1000
+
+# HID class control requests (report ID 0)
+_SET_REPORT = 0x09
+_GET_REPORT = 0x01
+_RT_HOST_TO_DEV = 0x21  # class, interface
+_RT_DEV_TO_HOST = 0xA1
+_WVALUE_OUTPUT = 0x0200
+_WVALUE_INPUT = 0x0100
 
 
 class HidTransport:
@@ -32,15 +47,16 @@ class HidTransport:
 
     def open(self) -> None:
         try:
-            import hid as _hid
+            import usb.core as _core
+            import usb.util as _util
         except ImportError as e:
             raise ImportError(
-                "The 'hid' package is not installed.\n"
-                "  Linux:  sudo apt install libhidapi-dev && pip install hid\n"
-                "  macOS:  brew install hidapi && pip install hid"
+                "The 'pyusb' package (and native libusb) is not installed.\n"
+                "  Linux:  sudo apt install libusb-1.0-0 && uv sync\n"
+                "  macOS:  brew install libusb && uv sync"
             ) from e
 
-        devices = _hid.enumerate(VID, PID)
+        devices = list(_core.find(find_all=True, idVendor=VID, idProduct=PID))
         if not devices:
             raise DeviceNotFound(
                 f"No device found with VID=0x{VID:04x} PID=0x{PID:04x}. "
@@ -52,10 +68,21 @@ class HidTransport:
                 f"(found {len(devices)} matching device(s))"
             )
 
-        self._dev = _hid.device()
-        self._dev.open(VID, PID)
-        prod = devices[self._device_index].get("product_string", "unknown")
-        log.debug("Opened HID device: %s (index %d)", prod, self._device_index)
+        dev = devices[self._device_index]
+        try:
+            if dev.is_kernel_driver_active(_INTERFACE):
+                dev.detach_kernel_driver(_INTERFACE)
+        except NotImplementedError:
+            pass  # macOS: not supported and not needed — interface 4 is unclaimed
+        _util.claim_interface(dev, _INTERFACE)
+        self._dev = dev
+        log.debug(
+            "Opened USB device %s (index %d), claimed interface %d",
+            dev.product, self._device_index, _INTERFACE,
+        )
+        # The device refuses READ_BLOCK with an ee55 ACK until this is sent
+        resp = self.transact(bytes(build_session_open()))
+        log.debug("Session open ack: %s", resp[:4].hex(" "))
 
     def close(self) -> None:
         self._stop.set()
@@ -63,9 +90,12 @@ class HidTransport:
             self._ka_thread.join(timeout=2.0)
             self._ka_thread = None
         if self._dev:
-            self._dev.close()
+            import usb.util as _util
+
+            _util.release_interface(self._dev, _INTERFACE)
+            _util.dispose_resources(self._dev)
             self._dev = None
-            log.debug("HID device closed")
+            log.debug("USB device closed")
 
     def __enter__(self) -> "HidTransport":
         self.open()
@@ -81,11 +111,22 @@ class HidTransport:
     def transact(self, payload: bytes) -> bytes:
         """Atomic send + recv, protected by lock (keepalive-safe)."""
         assert len(payload) == 256, f"payload must be 256 bytes, got {len(payload)}"
+        import usb.core as _core
+
         with self._lock:
-            self._dev.write(bytes([_REPORT_ID]) + payload)
-            data = self._dev.read(256, timeout_ms=_READ_TIMEOUT_MS)
-        if not data:
-            raise TransportTimeout("No response from device (timeout after 500 ms)")
+            try:
+                self._dev.ctrl_transfer(
+                    _RT_HOST_TO_DEV, _SET_REPORT, _WVALUE_OUTPUT, _INTERFACE,
+                    payload, timeout=_TIMEOUT_MS,
+                )
+                data = self._dev.ctrl_transfer(
+                    _RT_DEV_TO_HOST, _GET_REPORT, _WVALUE_INPUT, _INTERFACE,
+                    256, timeout=_TIMEOUT_MS,
+                )
+            except _core.USBTimeoutError as e:
+                raise TransportTimeout(f"No response from device: {e}") from e
+        if not len(data):
+            raise TransportTimeout("Empty GET_REPORT response from device")
         return bytes(data)
 
     # ------------------------------------------------------------------
