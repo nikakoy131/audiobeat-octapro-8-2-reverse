@@ -19,6 +19,11 @@ REG_FIRMWARE: Final = 0x80F0
 REG_KEEPALIVE: Final = 0xA515
 REG_INIT: Final = 0x9909
 
+# CMD 0x05 session open (usb1.pcapng frame 107) — must be sent once after
+# connecting or the device answers READ_BLOCK with a short ee55 refusal ACK
+SESSION_OPEN_ADDR: Final = 0x00B7
+SUB_SESSION_OPEN: Final = 0x1103
+
 # CMD 0x0a sub-addresses (known)
 SUB_HPF_FREQ: Final = 0x05
 SUB_GAIN: Final = 0x26

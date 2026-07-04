@@ -43,15 +43,23 @@ See [`PROTOCOL.md`](PROTOCOL.md) for the full reference.
 
 ### Prerequisites
 
-The Python `hid` package requires the native hidapi library:
+The CLI talks to the device with `pyusb`, which needs the native libusb library:
 
 ```bash
 # macOS
-brew install hidapi
+brew install libusb
 
 # Ubuntu / Debian
-sudo apt install libhidapi-dev
+sudo apt install libusb-1.0-0
 ```
+
+**Why libusb and not hidapi:** the DSP protocol lives on USB interface 4, a
+HID-class interface with *no interrupt endpoints* (every exchange is a
+SET_REPORT/GET_REPORT control-transfer pair). Because that interface is not
+HID-compliant, the OS HID stack never binds to it — on macOS it doesn't exist
+as a HID device at all (only interface 3, the media-key remote, does). libusb
+drives the unclaimed interface directly, exactly mirroring the vendor app's
+traffic.
 
 ### Install
 
