@@ -115,6 +115,21 @@ def build_session_open() -> bytearray:
     return pkt
 
 
+def parse_keepalive_volume(resp: bytes) -> tuple[float, bool]:
+    """Decode main volume from a keepalive IN packet (status 0x000f).
+
+    The keepalive response doubles as a main-volume readback: float32 LE dB
+    at [12:16], live-verified against the remote knob across its full range
+    (knob 0 = -60.0 dB ... knob 35 = +6.0 dB, audio-taper curve between).
+
+    Byte [16] is a response checksum: (sum(resp[8:16]) - 0x70) & 0xFF —
+    fits all live samples so far (n=3); returned flag is False on mismatch.
+    """
+    volume_db: float = struct.unpack_from("<f", resp, 12)[0]
+    trailer_ok = resp[16] == (sum(resp[8:16]) - 0x70) & 0xFF
+    return volume_db, trailer_ok
+
+
 # ---------------------------------------------------------------------------
 # IN packet parser
 # ---------------------------------------------------------------------------
