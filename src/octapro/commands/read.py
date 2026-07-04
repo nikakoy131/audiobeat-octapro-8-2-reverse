@@ -99,6 +99,48 @@ def run_read_master(no_keepalive: bool = False) -> int:
     return 0
 
 
+def run_read_volume(no_keepalive: bool = False) -> int:
+    from rich.console import Console
+    from rich.table import Table
+
+    from octapro.logging import log_packet_in, log_packet_out, warn_unknown
+    from octapro.protocol.constants import REG_KEEPALIVE, STATUS_KEEPALIVE
+    from octapro.protocol.packet import InPacket, build_keepalive, parse_keepalive_volume
+    from octapro.transport.hid import HidTransport
+
+    console = Console()
+    try:
+        with HidTransport() as t:
+            if not no_keepalive:
+                t.start_keepalive()
+            pkt = build_keepalive()
+            log_packet_out(0x04, 0x00B0, REG_KEEPALIVE, bytes(pkt))
+            resp = t.transact(bytes(pkt))
+            log_packet_in(resp)
+            ip = InPacket(resp)
+            if ip.status != STATUS_KEEPALIVE:
+                warn_unknown("in_status", f"0x{ip.status:04x}", "keepalive for volume read")
+            volume_db, trailer_ok = parse_keepalive_volume(resp)
+            if not trailer_ok:
+                warn_unknown(
+                    "keepalive_trailer",
+                    f"0x{resp[16]:02x}",
+                    f"expected (sum(resp[8:16])-0x70)&0xff = "
+                    f"0x{(sum(resp[8:16]) - 0x70) & 0xFF:02x}",
+                )
+            table = Table(title="Main Volume", show_header=False, min_width=40)
+            table.add_column("Field", style="bold")
+            table.add_column("Value")
+            table.add_row("Main volume", f"{volume_db:+.2f} dB")
+            table.add_row("Range", "−60.0 … +6.0 dB (remote knob 0–35)")
+            table.add_row("Raw float32", resp[12:16].hex(" "))
+            console.print(table)
+    except Exception as exc:
+        log.error("%s", exc)
+        return 1
+    return 0
+
+
 def _read_and_print(transport, ch: int, show_eq: bool = False) -> None:
     from rich.console import Console
     from rich.table import Table

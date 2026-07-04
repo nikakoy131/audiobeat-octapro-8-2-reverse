@@ -463,6 +463,40 @@ After the first WRITE_DSP (0x0a) write, the keepalive payload `d[9:16]` echoes
 the last written parameter's data bytes (same bytes as 0x0a `d[9:16]`). The echo
 persists in every subsequent keepalive until the next write.
 
+### Main volume readback (LIVE-CONFIRMED 2026-07-04)
+
+The keepalive response (status `0x000f`, dlen 11) carries the **main volume**
+as float32 LE dB at bytes **[12:16]** of the raw IN packet:
+
+```
+0f 00 e0 a2 0b 00 b0 00 | 15 00 01 02 | VV VV VV VV | CK | 00...
+  status    dlen  addr    reg echo      float32 dB    trailer csum
+```
+
+Verified by stepping the physical remote main-volume knob across its range:
+
+| Knob | dB | raw |
+|------|--------|-------------|
+| 0 | −60.00 | `00 00 70 c2` |
+| 5 | −33.17 | `14 ae 04 c2` |
+| 15 | −14.19 | `3d 0a 63 c1` |
+| 25 | −3.33 | `b8 1e 55 c0` |
+| 30 | +1.12 | `29 5c 8f 3f` |
+| 34 | +5.11 | `1f 85 a3 40` |
+| 35 | +6.00 | `00 00 c0 40` |
+
+Endpoints are exactly the manual's −60/+6 dB; the interior is an audio-taper
+lookup curve (≈1 dB/step near max, ≈1.9 dB/step near min), not a formula.
+The **same float** appears in the master block (CH0 read) at data bytes [9:13].
+Note: the device has two volume controls — this tracks the *remote knob*
+(runtime volume); the app-side input/output max settings are separate.
+
+**Trailer checksum** at [16]: `(sum(resp[8:16]) − 0x70) & 0xFF` — fits all
+live samples (n=3: `0xa8`, `0xda`, `0x2f`); n is small, treat as hypothesis.
+Different constant from the OUT checksum's `− 0x20`.
+
+CLI: `octaproctl read volume`.
+
 ---
 
 ## Still Unknown
@@ -479,7 +513,7 @@ capture plan. High-level outstanding items:
 - Speaker-type write (candidate: application-level type enum 0x1a, count=6, payload 0x01..0x06 for HF/MF/LF/MHF/MLF/FF — see EXE static analysis)
 - Exact meaning of cmd 0x08 (sub=0x0206 vs 0x8206 — two variants, both carry a bit-doubling data pattern)
 - Exact meaning of cmd 0x1c (addr=0x00b7, sub=0x0121 — handshake; payload is the same bit-doubling pattern)
-- Main volume write — keepalive **response** already echoes its float32 value; write command probably reuses CMD 0x04 SUB 0xa515 with a float in the data slot
+- Main volume **write** — read side is solved (see *Main volume readback*); write command probably reuses CMD 0x04 SUB 0xa515 with a float in the data slot, unverified
 - Routing matrix byte layout (32 bytes, signed int8 per output, but exact input/output mapping unclear)
 - Q byte encoding (0x0a default; first EQ band uses different value e.g. 0x2b, 0x15)
 
