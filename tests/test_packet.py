@@ -70,6 +70,38 @@ class TestBuildReadChannel:
         assert pkt[8] == 0x94 + 0
 
 
+class TestParseKeepaliveVolume:
+    """Live-captured keepalive responses at known remote-knob positions."""
+
+    def _resp(self, float_hex: str, trailer: int) -> bytes:
+        head = bytes.fromhex("0f00e0a20b00b00015000102")
+        return head + bytes.fromhex(float_hex) + bytes([trailer]) + bytes(256 - 17)
+
+    def test_knob_35_max(self):
+        from octapro.protocol.packet import parse_keepalive_volume
+
+        vol, ok = parse_keepalive_volume(self._resp("0000c040", 0xA8))
+        assert vol == 6.0 and ok
+
+    def test_knob_0_min(self):
+        from octapro.protocol.packet import parse_keepalive_volume
+
+        vol, ok = parse_keepalive_volume(self._resp("000070c2", 0xDA))
+        assert vol == -60.0 and ok
+
+    def test_knob_34(self):
+        from octapro.protocol.packet import parse_keepalive_volume
+
+        vol, ok = parse_keepalive_volume(self._resp("1f85a340", 0x2F))
+        assert abs(vol - 5.11) < 0.001 and ok
+
+    def test_bad_trailer_flagged(self):
+        from octapro.protocol.packet import parse_keepalive_volume
+
+        vol, ok = parse_keepalive_volume(self._resp("0000c040", 0x00))
+        assert vol == 6.0 and not ok
+
+
 class TestBuildSessionOpen:
     def test_wire_bytes_match_capture(self):
         # usb1.pcapng frame 107 — first packet the vendor app sends
