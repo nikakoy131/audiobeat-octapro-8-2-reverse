@@ -128,11 +128,16 @@ def run_read_volume(no_keepalive: bool = False) -> int:
                     f"expected (sum(resp[8:16])-0x70)&0xff = "
                     f"0x{(sum(resp[8:16]) - 0x70) & 0xFF:02x}",
                 )
+            from octapro.protocol.volume import db_to_knob
+
+            knob, exact = db_to_knob(volume_db)
+            knob_str = f"{knob}" if exact else f"≈{knob}  (interpolated)"
             table = Table(title="Main Volume", show_header=False, min_width=40)
             table.add_column("Field", style="bold")
             table.add_column("Value")
             table.add_row("Main volume", f"{volume_db:+.2f} dB")
-            table.add_row("Range", "−60.0 … +6.0 dB (remote knob 0–35)")
+            table.add_row("Remote knob", f"{knob_str} of 0–35")
+            table.add_row("Range", "−60.0 … +6.0 dB")
             table.add_row("Raw float32", resp[12:16].hex(" "))
             console.print(table)
     except Exception as exc:
