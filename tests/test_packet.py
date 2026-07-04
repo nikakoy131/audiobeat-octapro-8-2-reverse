@@ -54,6 +54,12 @@ class TestBuildReadChannel:
         assert pkt[2] == 0x05
         assert pkt[3] == 0x00
 
+    def test_wire_bytes_match_capture(self):
+        # usb1.pcapng frame 119: sub bytes are 04 <ch>, not <ch> 04 —
+        # the checksum is a byte sum and cannot catch a swap here
+        assert bytes(build_read_channel(1))[:9] == bytes.fromhex("e0a20500b000040195")
+        assert bytes(build_read_channel(10))[:9] == bytes.fromhex("e0a20500b000040a9e")
+
     def test_magic_checksum(self):
         # Checksum is the observed magic 0x94+ch from captures
         pkt = build_read_channel(7)
@@ -62,6 +68,14 @@ class TestBuildReadChannel:
     def test_master(self):
         pkt = build_read_channel(0)
         assert pkt[8] == 0x94 + 0
+
+
+class TestBuildSessionOpen:
+    def test_wire_bytes_match_capture(self):
+        # usb1.pcapng frame 107 — first packet the vendor app sends
+        from octapro.protocol.packet import build_session_open
+
+        assert bytes(build_session_open())[:9] == bytes.fromhex("e0a20500b7000311ab")
 
 
 class TestBuildWriteDsp:
