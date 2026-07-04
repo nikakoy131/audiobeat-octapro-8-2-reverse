@@ -18,7 +18,7 @@ Work here is:
 - **Build:** `hatchling` + `hatch-vcs` — version is derived from git tags
 - **Lint:** `uv run ruff check src tests` (line-length 100)
 - **Types:** `uv run mypy src`
-- **Tests:** `uv run pytest` — 57 tests, all offline (no device needed)
+- **Tests:** `uv run pytest` — 59 tests, all offline (no device needed)
 - **All three must be clean before committing**
 
 ## Project Layout
@@ -37,7 +37,8 @@ src/octapro/
     routing.py         32-byte routing matrix parser
     gain.py            byte ↔ dB, mute=0x80
   transport/
-    hid.py             HidTransport: open/close, transact (lock-protected), keepalive thread
+    hid.py             HidTransport (pyusb, interface 4): open incl. session-open,
+                       transact = SET_REPORT+GET_REPORT pair (lock-protected), keepalive thread
   commands/
     info.py            handshake + firmware banner
     read.py            read channel(s), decoded table output
@@ -70,6 +71,13 @@ tests/
 
 **Device:** VID=`0x8888`, PID=`0x1234`, USB Full Speed, HID CONTROL transfers (not Interrupt)
 
+**Transport:** interface 4 (no interrupt endpoints → OS HID stacks don't bind; must use
+pyusb/libusb, not hidapi). OUT = SET_REPORT (0x21/0x09/wValue 0x0200), IN = GET_REPORT
+(0xA1/0x01/wValue 0x0100). A **session-open packet** (CMD `0x05` addr=`0x00b7` sub=`0x1103`)
+is mandatory after connect — otherwise READ_BLOCK returns a short `ee 55` refusal ACK.
+`HidTransport.open()` sends it automatically. Live-verified 2026-07-04 (fw
+`A239-A-DP603-U5.6-250110-DSP1452-BMP885`).
+
 **OUT payload** (256 bytes): `[e0 a2] [CMD] [00] [ADDR uint16 LE] [SUB uint16 LE] [CSUM] [DATA...]`
 
 **Checksum (universal):** `(sum(pkt[4:13]) - 0x20) & 0xFF`
@@ -81,7 +89,9 @@ tests/
 
 **Known commands:**
 - `0x04` WRITE_PARAM — write register (firmware string at `0x80f0`, keepalive at `0xa515`)
-- `0x05` READ_BLOCK — read full channel state (256-byte response)
+- `0x05` (addr=`0x00b7`, sub=`0x1103`) — session open, mandatory first packet
+- `0x05` READ_BLOCK — read full channel state; wire bytes [6:8] are `04 CH`
+  (LE u16 sub = `(CH << 8) | 0x04` — byte order matters, the checksum can't catch a swap)
 - `0x05` (addr=`0xNNb7`, sub=`0x01`) — DSP commit trigger after WRITE_DSP batch
 - `0x0a` WRITE_DSP — real-time DSP write; sub `0x05`=HPF freq, sub `0x26`=GAIN
 
