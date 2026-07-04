@@ -4,6 +4,47 @@ log = logging.getLogger("octapro.read")
 
 _SLOPE_NAMES = {0x03: "12 dB/oct", 0x05: "36 dB/oct"}
 
+# EQ bar meter: diverging around 0 dB, ±12.8 dB = encoding limit of the gain byte
+_EQ_MAX_DB = 12.8
+_EQ_HALF_CELLS = 12
+
+
+def _fmt_freq(hz: float) -> str:
+    return f"{hz / 1000:g}k" if hz >= 1000 else f"{hz:g}"
+
+
+def _eq_bar(gain_db: float | None):
+    """Exact-width Text bar: cut extends left (red), boost right (cyan), dim 0-line.
+
+    Built as rich.Text, not markup — Rich trims trailing spaces off markup
+    strings before justifying, which would drift the 0-line off center.
+    """
+    from rich.text import Text
+
+    h = _EQ_HALF_CELLS
+    t = Text()
+    if gain_db is None:
+        t.append(" " * h)
+        t.append("✕", style="red bold")
+        t.append(" " * h)
+        return t
+    cells = min(h, round(abs(gain_db) / _EQ_MAX_DB * h))
+    if gain_db > 0 and cells:
+        t.append(" " * h)
+        t.append("│", style="dim")
+        t.append("█" * cells, style="cyan")
+        t.append(" " * (h - cells))
+    elif gain_db < 0 and cells:
+        t.append(" " * (h - cells))
+        t.append("█" * cells, style="red")
+        t.append("│", style="dim")
+        t.append(" " * h)
+    else:
+        t.append(" " * h)
+        t.append("│", style="dim")
+        t.append(" " * h)
+    return t
+
 
 def run_read_channel(channel: str, no_keepalive: bool = False) -> int:
     from octapro.transport.hid import HidTransport
@@ -21,8 +62,10 @@ def run_read_channel(channel: str, no_keepalive: bool = False) -> int:
         with HidTransport() as t:
             if not no_keepalive:
                 t.start_keepalive()
+            # single-channel read gets the full 31-band EQ meter
+            show_eq = len(channels) == 1
             for ch in channels:
-                _read_and_print(t, ch)
+                _read_and_print(t, ch, show_eq=show_eq)
     except Exception as exc:
         log.error("%s", exc)
         return 1
@@ -56,7 +99,7 @@ def run_read_master(no_keepalive: bool = False) -> int:
     return 0
 
 
-def _read_and_print(transport, ch: int) -> None:
+def _read_and_print(transport, ch: int, show_eq: bool = False) -> None:
     from rich.console import Console
     from rich.table import Table
 
@@ -96,4 +139,36 @@ def _read_and_print(transport, ch: int) -> None:
         _SLOPE_NAMES.get(block.lpf_slope_byte, f"0x{block.lpf_slope_byte:02x} (unknown)"),
     )
     table.add_row("EQ active bands", f"{len(active_eq)}" + ("" if active_eq else "  (flat)"))
+    console.print(table)
+
+    if show_eq:
+        _print_eq_table(console, ch, block.eq_bands)
+
+
+def _print_eq_table(console, ch: int, bands) -> None:
+    from rich.table import Table
+
+    table = Table(
+        title=f"Channel {ch} — 31-band EQ",
+        caption="Q ≈ q_byte / 10 — encoding hypothesis, unverified (PROTOCOL.md)",
+        caption_justify="right",
+    )
+    # header is exactly bar-width (2*half+1) with "0" above the center line
+    h = _EQ_HALF_CELLS
+    bar_header = f"−{_EQ_MAX_DB:g}".ljust(h) + "0" + f"+{_EQ_MAX_DB:g}".rjust(h)
+    table.add_column("#", justify="right", style="bold")
+    table.add_column("Freq", justify="right")
+    table.add_column(bar_header, justify="left", no_wrap=True)
+    table.add_column("Gain", justify="right")
+    table.add_column("Q", justify="right")
+
+    for b in bands:
+        flat = b.gain_db is not None and abs(b.gain_db) <= 0.05
+        gain_str = "MUTE" if b.gain_db is None else f"{b.gain_db:+.1f}"
+        q_str = f"0x{b.q_byte:02x} (≈{b.q_byte / 10:.1f})"
+        style = "dim" if flat else ""
+        table.add_row(
+            str(b.index + 1), _fmt_freq(b.freq_hz), _eq_bar(b.gain_db),
+            gain_str, q_str, style=style,
+        )
     console.print(table)
