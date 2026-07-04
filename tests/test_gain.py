@@ -79,3 +79,25 @@ class TestEqBar:
 
         v = self._visible(_eq_bar(None))
         assert len(v) == 25 and v[12] == "✕"
+
+
+class TestDbToKnob:
+    def test_anchors_exact(self):
+        from octapro.protocol.volume import KNOB_CALIBRATION, db_to_knob
+
+        for step, db in KNOB_CALIBRATION:
+            got, exact = db_to_knob(db)
+            assert got == step and exact, f"anchor {step} -> {got}, exact={exact}"
+
+    def test_interpolated_between_anchors(self):
+        from octapro.protocol.volume import db_to_knob
+
+        # +3.1 dB sits between knob 30 (+1.12) and knob 34 (+5.11)
+        step, exact = db_to_knob(3.1)
+        assert step == 32 and not exact
+
+    def test_clamped_outside_range(self):
+        from octapro.protocol.volume import db_to_knob
+
+        assert db_to_knob(-99.0) == (0, False)
+        assert db_to_knob(10.0) == (35, False)
