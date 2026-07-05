@@ -23,8 +23,10 @@ The device uses **USB HID CONTROL** transfers (not interrupt) with 256-byte payl
 | CMD | Name | Description |
 |:---:|:---|:---|
 | `0x04` | `WRITE_PARAM` | Write to device registers (firmware read, keepalive, init). |
-| `0x05` | `READ_BLOCK` | Read full 256-byte parameter state of a channel. |
-| `0x0a` | `WRITE_DSP` | Real-time write of DSP RAM parameters (float32). |
+| `0x05` | `READ_BLOCK` | Read full 256-byte parameter state of a channel (CH0 = master). |
+| `0x05` | session open | `addr=0x00b7 sub=0x1103` — mandatory first packet after connect. |
+| `0x05` | commit | `addr=0xNNb7 sub=0x01` — applies a staged `WRITE_DSP` batch. |
+| `0x0a` | `WRITE_DSP` | Real-time write of DSP RAM parameters (float32). CH0 = master volume. |
 
 ### Packet Structure (OUT)
 
@@ -85,8 +87,14 @@ uv run octaproctl info
 # Read all 10 DSP channels
 uv run octaproctl read channel all
 
-# Read a single channel
+# Read a single channel — includes a 31-band EQ table with bar visualization
 uv run octaproctl read channel 7
+
+# Read the master block (CH0) — master volume (software "Main" fader) + firmware
+uv run octaproctl read master
+
+# Read knob-vol — the remote-panel knob volume (decoded from the keepalive echo)
+uv run octaproctl read knob-vol
 
 # Parse a .dat preset file — no device needed
 uv run octaproctl parse-dat dsp_m2.dat
@@ -108,6 +116,9 @@ uv run octaproctl write hpf --channel 7 --freq 25 --commit
 
 # Write gain — dry run
 uv run octaproctl write gain --channel 7 --db -3.0
+
+# Write MASTER volume (channel 0) — dry run; byte→dB scale still uncalibrated
+uv run octaproctl write gain --channel 0 --db -6.0
 ```
 
 ### All Commands
@@ -182,12 +193,18 @@ GitHub Actions (`release.yml`) builds a wheel + sdist and attaches them to the R
 
 ## Project Roadmap
 
-- [x] USB HID handshake sequence documented
-- [x] Channel parameter readback (`CMD 0x05`)
+- [x] USB HID handshake sequence documented (incl. mandatory session-open packet)
+- [x] Working transport against real hardware (pyusb/libusb on interface 4)
+- [x] Channel parameter readback (`CMD 0x05`) — live-verified
 - [x] HPF frequency/slope write (`CMD 0x0a`)
 - [x] Channel gain write (`CMD 0x0a`)
+- [x] Master volume write (`CMD 0x0a` to CH0 + commit) — live-verified
+- [x] knob-vol readback (remote knob, keepalive echo) — live-calibrated 0–35
+- [x] Master block (CH0) decoder — master volume + firmware banner
+- [x] 31-band EQ readback with per-band gain/Q display
 - [x] `.dat` preset file parser
 - [x] Alpha CLI (`octaproctl`) with research logging
+- [ ] Master volume write byte→dB scale calibration (single data point so far)
 - [ ] LPF frequency write (sub-address TBD)
 - [ ] EQ band gain/Q write
 - [ ] Routing matrix write
