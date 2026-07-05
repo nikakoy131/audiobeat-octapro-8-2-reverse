@@ -74,8 +74,10 @@ def run_read_channel(channel: str, no_keepalive: bool = False) -> int:
 
 def run_read_master(no_keepalive: bool = False) -> int:
     from rich.console import Console
+    from rich.table import Table
 
-    from octapro.logging import log_packet_in, log_packet_out
+    from octapro.logging import log_packet_in, log_packet_out, warn_unknown
+    from octapro.protocol.channel import parse_master_block
     from octapro.protocol.packet import InPacket, build_read_channel
     from octapro.transport.hid import HidTransport
 
@@ -85,14 +87,23 @@ def run_read_master(no_keepalive: bool = False) -> int:
             if not no_keepalive:
                 t.start_keepalive()
             pkt = build_read_channel(0)
-            log_packet_out(0x05, 0x00B0, 0x04 << 8, bytes(pkt))
+            log_packet_out(0x05, 0x00B0, 0x04, bytes(pkt))
             resp = t.transact(bytes(pkt))
             log_packet_in(resp)
             ip = InPacket(resp)
-            console.print(
-                f"[bold]Master (CH0)[/] status=0x{ip.status:04x} dlen={ip.data_len}  "
-                f"data[0:16]: {ip.data[:16].hex()}"
-            )
+            block = parse_master_block(ip.data[: ip.data_len], warn=warn_unknown)
+
+            table = Table(title="Master (CH0)", show_header=False, min_width=44)
+            table.add_column("Field", style="bold")
+            table.add_column("Value")
+            table.add_row("Main volume", f"{block.volume_db:+.2f} dB")
+            table.add_row("Firmware", block.firmware or "(not present)")
+            table.add_row("Status / dlen", f"0x{ip.status:04x} / {ip.data_len}")
+            console.print(table)
+
+            console.print("[bold]Raw block:[/bold]")
+            for i in range(0, ip.data_len, 16):
+                console.print(f"  [dim][{i:3d}][/dim] {ip.data[i:i + 16].hex(' ')}")
     except Exception as exc:
         log.error("%s", exc)
         return 1
