@@ -153,15 +153,15 @@ Channel volume range: 0 to -60 dB → bytes 0x78 to 0x14.
 | **EQ gain** (one band, known dB) | Find EQ write address | Different addr range |
 | **EQ freq** (move band center) | Confirm EQ freq addr vs HPF addr | |
 | **EQ Q** | Find Q encoding | Q range 0.4–20 |
-| **MUTE** channel on/off | Find mute flag/command | |
-| **Phase** 0°→180° | Find phase command | |
+| ~~**MUTE** channel on/off~~ | ~~Find mute flag/command~~ | **DONE 2026-07-06** (master) — CMD 0x05 sub-byte 0x0d, byte[7]=1/0; see PROTOCOL.md "Mute write". Per-channel unverified |
+| ~~**Phase** 0°→180°~~ | ~~Find phase command~~ | **DONE 2026-07-06** — CMD 0x05 selector 0x02; see PROTOCOL.md "Phase invert" |
 | **Delay** (e.g. set 1.5 ms) | Find delay addr + encoding | Range 0–20ms |
 | **Routing** (change one crosspoint) | Find routing matrix command | |
 | **Preset save** (M1 save button) | Find write sequence | 6 slots total |
 | **Preset load** (select M2) | Find read/apply sequence | |
-| **Bridge** CH7+CH8 toggle | Find bridge command | |
+| ~~**Bridge** CH7+CH8 toggle~~ | ~~Find bridge command~~ | **DONE 2026-07-06** — CMD 0x1c sub 0x28, byte[19] bit 0x80; see PROTOCOL.md "Bridge CH7+CH8" |
 | **Input source** switch | Find source select command | |
-| **Main volume** change | Find master vol command | +6 to -60 dB |
+| ~~**Main volume** change~~ | ~~Find master vol command~~ | **DONE 2026-07-05** — CMD 0x08 sub 0x0c, see PROTOCOL.md "Master volume write" |
 | **EQ Pass** toggle | Find EQ bypass command | |
 | **Noise gate** threshold | Find noise gate cmd | Factory set, low priority |
  

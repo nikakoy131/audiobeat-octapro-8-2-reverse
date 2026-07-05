@@ -4,9 +4,13 @@ import pytest
 
 from octapro.protocol.constants import WRITE_DSP_TRAILER
 from octapro.protocol.packet import (
+    build_bridge,
     build_dsp_commit,
+    build_mute,
+    build_phase,
     build_read_channel,
     build_write_dsp,
+    build_write_master_volume,
     channel_addr,
     compute_checksum,
 )
@@ -105,6 +109,137 @@ class TestMasterVolumeWrite:
             channel_addr(11)
         with pytest.raises(ValueError):
             channel_addr(-1)
+
+
+class TestBuildWriteMasterVolume:
+    """Live-captured 2026-07-05: CMD 0x08 SUB 0x0c direct master-volume write.
+
+    Captured by replaying the vendor app's own traffic through a Linux uhid
+    shim while dragging the Main fader (docs/LINUX_UHID_SHIM_PLAN.md). Each
+    (dB, checksum) pair below is a distinct real packet the app sent; the
+    last one is an independently-verified sample (dragged to "-20.0 dB" on
+    the app's own UI, decoded here to -20.02 dB).
+    """
+
+    LIVE_SAMPLES = [
+        (-35.25, 0x72),
+        (-10.50, 0x8C),
+        (-17.48, 0xD0),
+        (-35.88, 0x18),
+        (-0.98, 0x05),
+        (-25.10, 0xC5),
+        (-6.06, 0x94),
+        (-6.69, 0xC8),
+        (-13.04, 0x2E),
+        (-16.21, 0xA7),
+        (-19.38, 0x46),
+        (-20.65, 0x6F),
+        (-21.29, 0x4B),
+        (-21.92, 0x98),
+        (-20.02, 0x22),
+    ]
+
+    def test_structure(self):
+        pkt = build_write_master_volume(-10.5)
+        assert pkt[0:2] == bytes.fromhex("e0a2")
+        assert pkt[2] == 0x08
+        assert pkt[3] == 0x00
+        assert pkt[4:6] == bytes.fromhex("b700")  # addr = channel_addr(0)
+        assert pkt[6] == 0x0C
+
+    def test_no_write_dsp_trailer(self):
+        # unlike CMD 0x0a, there's no [14:16] trailer for this command
+        pkt = build_write_master_volume(-10.5)
+        assert pkt[12:16] == bytes(4)
+
+    def test_live_samples_roundtrip_and_checksum(self):
+        for db, expected_checksum in self.LIVE_SAMPLES:
+            pkt = build_write_master_volume(db)
+            recovered = struct.unpack_from("<f", pkt, 7)[0]
+            assert abs(recovered - db) < 0.005
+            assert pkt[11] == expected_checksum
+
+
+class TestBuildMute:
+    """Live-captured 2026-07-06 via the uhid shim: CMD 0x05 mute toggle.
+    Master and per-channel use different sub-bytes (byte[6]) — both verified
+    byte-perfect incl. checksum: master on/off, channels 2/6/10 mute, ch6
+    unmute."""
+
+    def test_master_mute_on_bytes(self):
+        assert bytes(build_mute(0, True))[:9] == bytes.fromhex("e0a20500b7000d01a5")
+
+    def test_master_mute_off_bytes(self):
+        assert bytes(build_mute(0, False))[:9] == bytes.fromhex("e0a20500b7000d00a4")
+
+    def test_master_only_state_and_checksum_differ(self):
+        on = bytes(build_mute(0, True))
+        off = bytes(build_mute(0, False))
+        assert on[7] == 0x01 and off[7] == 0x00
+        assert on[:7] == off[:7]
+        assert on[9:] == off[9:]
+
+    def test_channel_mute_on_live_samples(self):
+        # exact wire bytes captured from the app muting CH2/6/10
+        assert bytes(build_mute(2, True))[:9] == bytes.fromhex("e0a20500b70201019b")
+        assert bytes(build_mute(6, True))[:9] == bytes.fromhex("e0a20500b70601019f")
+        assert bytes(build_mute(10, True))[:9] == bytes.fromhex("e0a20500b70a0101a3")
+
+    def test_channel_unmute_live_sample(self):
+        # captured from the app unmuting CH6: byte[7] 01->00, checksum 9f->9e
+        assert bytes(build_mute(6, False))[:9] == bytes.fromhex("e0a20500b70601009e")
+
+    def test_channel_uses_sub_byte_01_not_0d(self):
+        pkt = build_mute(7, True)
+        assert struct.unpack_from("<H", pkt, 4)[0] == channel_addr(7)
+        assert pkt[6] == 0x01  # per-channel sub-byte, NOT the master's 0x0d
+        assert pkt[8] == compute_checksum(_zeroed_csum(pkt))
+
+
+def _zeroed_csum(pkt: bytes) -> bytes:
+    # helper: compute_checksum sums [4:13] incl. the checksum slot [8];
+    # verify against a copy with [8] cleared so the round-trip is well-defined
+    b = bytearray(pkt)
+    b[8] = 0
+    return bytes(b)
+
+
+class TestBuildPhase:
+    """Live-captured 2026-07-06 via the uhid shim: CMD 0x05 byte[6]=0x02
+    phase invert, from toggling channel 6. Both samples byte-perfect."""
+
+    def test_invert_live_sample(self):
+        assert bytes(build_phase(6, True))[:9] == bytes.fromhex("e0a20500b7060201a0")
+
+    def test_normal_live_sample(self):
+        assert bytes(build_phase(6, False))[:9] == bytes.fromhex("e0a20500b70602009f")
+
+    def test_selector_and_addr(self):
+        pkt = build_phase(3, True)
+        assert struct.unpack_from("<H", pkt, 4)[0] == channel_addr(3)
+        assert pkt[6] == 0x02 and pkt[7] == 0x01
+        assert pkt[8] == compute_checksum(_zeroed_csum(pkt))
+
+
+class TestBuildBridge:
+    """Live-captured 2026-07-06: CMD 0x1c bridge CH7+CH8 (only bridgeable
+    pair). Both states byte-perfect incl. the [4:31] checksum."""
+
+    ON = bytes.fromhex("e0a21c00b70028010002000400080010002000c000800000010002000400084d")
+    OFF = bytes.fromhex("e0a21c00b70028010002000400080010002000400080000001000200040008cd")
+
+    def test_bridged_bytes(self):
+        assert bytes(build_bridge(True))[:32] == self.ON
+
+    def test_unbridged_bytes(self):
+        assert bytes(build_bridge(False))[:32] == self.OFF
+
+    def test_only_state_bit_and_checksum_differ(self):
+        on = bytes(build_bridge(True))
+        off = bytes(build_bridge(False))
+        diffs = [i for i in range(256) if on[i] != off[i]]
+        assert diffs == [19, 31]
+        assert on[19] == 0xC0 and off[19] == 0x40
 
 
 class TestParseKeepaliveKnobVol:

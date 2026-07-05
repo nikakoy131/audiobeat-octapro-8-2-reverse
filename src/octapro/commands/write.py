@@ -97,12 +97,12 @@ def run_write_gain(
     if channel == 0:
         # Live-tested 2026-07-05: this packet does NOT write master volume —
         # it force-switches the input source to high level (payload ignored).
-        # See PROTOCOL.md "Master volume write — UNSOLVED".
+        # Use `write master` instead (CMD 0x08, see PROTOCOL.md).
         warn_unknown(
             "master_gain_write_blocked",
             f"0x{gain_byte:02x}",
             "CH0 WRITE_DSP switches input source to high level instead of "
-            "writing volume — commit refused; dry-run only",
+            "writing volume — commit refused; dry-run only. Use `write master` instead.",
         )
 
     if not commit:
@@ -113,7 +113,7 @@ def run_write_gain(
         log.error(
             "Refusing to commit: CH0 WRITE_DSP is not a volume write — it "
             "force-switches the input source to high level (PROTOCOL.md). "
-            "The real master volume write command is still unknown."
+            "Use `write master --db <value> --commit` instead."
         )
         return 1
 
@@ -131,6 +131,141 @@ def run_write_gain(
             resp2 = t.transact(bytes(commit_pkt))
             log_packet_in(resp2)
 
+            log.info("Written: %s", intent)
+    except Exception as exc:
+        log.error("Write failed: %s", exc)
+        return 1
+    return 0
+
+
+def run_write_mute(
+    channel: int,
+    mute: bool,
+    commit: bool,
+    no_keepalive: bool = False,
+) -> int:
+    from octapro.logging import log_packet_in, log_packet_out
+    from octapro.protocol.constants import CMD_READ_BLOCK
+    from octapro.protocol.packet import build_mute, channel_addr
+
+    pkt = build_mute(channel, mute)
+    label = "MASTER" if channel == 0 else f"CH{channel}"
+    intent = f"{label} MUTE → {'ON' if mute else 'OFF'}"
+
+    if not commit:
+        _dry_run_print(intent, bytes(pkt))
+        return 0
+
+    from octapro.transport.hid import HidTransport
+
+    try:
+        with HidTransport() as t:
+            if not no_keepalive:
+                t.start_keepalive()
+            log_packet_out(CMD_READ_BLOCK, channel_addr(channel), pkt[6], bytes(pkt))
+            resp = t.transact(bytes(pkt))
+            log_packet_in(resp)
+            # No separate commit observed for this command — applies immediately.
+            log.info("Written: %s", intent)
+    except Exception as exc:
+        log.error("Write failed: %s", exc)
+        return 1
+    return 0
+
+
+def run_write_phase(
+    channel: int,
+    invert: bool,
+    commit: bool,
+    no_keepalive: bool = False,
+) -> int:
+    from octapro.logging import log_packet_in, log_packet_out
+    from octapro.protocol.constants import CMD_READ_BLOCK
+    from octapro.protocol.packet import build_phase, channel_addr
+
+    pkt = build_phase(channel, invert)
+    intent = f"CH{channel} PHASE → {'180° (inverted)' if invert else '0° (normal)'}"
+
+    if not commit:
+        _dry_run_print(intent, bytes(pkt))
+        return 0
+
+    from octapro.transport.hid import HidTransport
+
+    try:
+        with HidTransport() as t:
+            if not no_keepalive:
+                t.start_keepalive()
+            log_packet_out(CMD_READ_BLOCK, channel_addr(channel), pkt[6], bytes(pkt))
+            resp = t.transact(bytes(pkt))
+            log_packet_in(resp)
+            # No separate commit observed for this command — applies immediately.
+            log.info("Written: %s", intent)
+    except Exception as exc:
+        log.error("Write failed: %s", exc)
+        return 1
+    return 0
+
+
+def run_write_bridge(
+    bridged: bool,
+    commit: bool,
+    no_keepalive: bool = False,
+) -> int:
+    from octapro.logging import log_packet_in, log_packet_out
+    from octapro.protocol.constants import CMD_BRIDGE, SUB_BRIDGE
+    from octapro.protocol.packet import build_bridge, channel_addr
+
+    pkt = build_bridge(bridged)
+    intent = f"BRIDGE CH7+CH8 → {'ON' if bridged else 'OFF'}"
+
+    if not commit:
+        _dry_run_print(intent, bytes(pkt))
+        return 0
+
+    from octapro.transport.hid import HidTransport
+
+    try:
+        with HidTransport() as t:
+            if not no_keepalive:
+                t.start_keepalive()
+            log_packet_out(CMD_BRIDGE, channel_addr(0), SUB_BRIDGE, bytes(pkt))
+            resp = t.transact(bytes(pkt))
+            log_packet_in(resp)
+            # No separate commit observed for this command — applies immediately.
+            log.info("Written: %s", intent)
+    except Exception as exc:
+        log.error("Write failed: %s", exc)
+        return 1
+    return 0
+
+
+def run_write_master(
+    db: float,
+    commit: bool,
+    no_keepalive: bool = False,
+) -> int:
+    from octapro.logging import log_packet_in, log_packet_out
+    from octapro.protocol.constants import SUB_MASTER_VOLUME
+    from octapro.protocol.packet import build_write_master_volume, channel_addr
+
+    pkt = build_write_master_volume(db)
+    intent = f"MASTER volume → {db:+.2f} dB"
+
+    if not commit:
+        _dry_run_print(intent, bytes(pkt))
+        return 0
+
+    from octapro.transport.hid import HidTransport
+
+    try:
+        with HidTransport() as t:
+            if not no_keepalive:
+                t.start_keepalive()
+            log_packet_out(0x08, channel_addr(0), SUB_MASTER_VOLUME, bytes(pkt))
+            resp = t.transact(bytes(pkt))
+            log_packet_in(resp)
+            # No separate commit observed for this command — applies immediately.
             log.info("Written: %s", intent)
     except Exception as exc:
         log.error("Write failed: %s", exc)

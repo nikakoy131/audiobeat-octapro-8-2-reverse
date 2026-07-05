@@ -570,10 +570,168 @@ IDs are unmapped (not in this unit's panel menu; presumably `0x04`/`0x05`).
 
 CLI: `octaproctl read knob-vol` shows the source name + ID.
 
-### Master volume write — UNSOLVED; CH0 gain write is DANGEROUS (retracted 2026-07-05)
+### CMD 0x05 channel-flag family (mute, phase, …)
 
-**RETRACTION.** The 2026-07-04 claim that `WRITE_DSP sub 0x26` to CH0 writes
-the master volume is **wrong**. Live re-testing 2026-07-05 showed:
+Live capture 2026-07-06 (uhid shim) revealed that several per-channel
+boolean controls share one command shape:
+
+```
+e0 a2 05 00 b7 NN <selector> <state> <csum>
+               (addr 0xNNb7 = channel_addr(ch); NN = channel number)
+```
+
+- **byte[6] = selector** picks the parameter
+- **byte[7] = state** (1 = on, 0 = off)
+- **byte[8] = checksum** — universal `(sum(pkt[4:13]) - 0x20) & 0xFF`
+
+| selector (byte[6]) | control | verified |
+|--------------------|---------|----------|
+| `0x01` | per-channel mute | CH2/6/10 on, CH6 off |
+| `0x02` | phase invert (1=180°, 0=0°) | CH6 on/off |
+| `0x0d` | **master** mute (ch0 only) | on/off |
+
+Builders: `packet.build_channel_flag(ch, selector, on)`, with `build_mute`
+and `build_phase` as named wrappers. Likely more selectors exist (bridge,
+EQ-pass, etc.) — capture them the same way. No commit packet follows any of
+these; they apply immediately.
+
+### Mute write — SOLVED 2026-07-06 (CMD 0x05; master and channel differ)
+
+Mute toggle, live-captured 2026-07-06 via the uhid shim
+(docs/LINUX_UHID_SHIM_PLAN.md) by toggling the app's mute buttons. Reuses
+opcode `0x05`. **The master and per-channel forms use different sub-bytes**
+— an asymmetry in the firmware, but both directly verified:
+
+```
+master  MUTE ON:   e0 a2 05 00 b7 00 0d 01 a5     byte[6]=0x0d
+master  MUTE OFF:  e0 a2 05 00 b7 00 0d 00 a4
+CH2     MUTE ON:   e0 a2 05 00 b7 02 01 01 9b     byte[6]=0x01
+CH6     MUTE ON:   e0 a2 05 00 b7 06 01 01 9f
+CH10    MUTE ON:   e0 a2 05 00 b7 0a 01 01 a3
+CH6     MUTE OFF:  e0 a2 05 00 b7 06 01 00 9e
+```
+
+| Field | Bytes | Meaning |
+|-------|-------|---------|
+| magic | `e0 a2` | |
+| CMD | `05` | same opcode as read/commit |
+| — | `00` | |
+| ADDR | `b7 NN` | LE `0xNNb7` = `channel_addr(ch)` (`00b7`=master, `0Nb7`=CH N) |
+| sub-byte | `0d` / `01` | byte [6]: **0x0d for master, 0x01 for CH1–10** |
+| state | `01`/`00` | byte [7]: 1 = mute, 0 = unmute |
+| checksum | | byte [8]: `(sum(pkt[4:13]) - 0x20) & 0xFF` (universal formula) |
+
+All samples byte-perfect including checksum (verified: master on/off,
+CH2/6/10 mute, CH6 unmute). No commit packet follows; applies immediately.
+
+**Note on the per-channel form:** byte[6]=0x01 makes the LE u16 sub read
+`0x0101` (mute) / `0x0001` (unmute) — the exact signature earlier notes
+guessed was a "DSP commit trigger" (see below). That guess was wrong; those
+captures were mute toggles.
+
+**Caveat:** the master captures had `5e c2 8f` trailing at bytes [9:12] —
+stale buffer bleed (the vendor app reuses one HID buffer that still held the
+last keepalive volume float), **not** part of the command. A clean packet
+zero-fills the tail; the device ignores it.
+
+CLI: `write mute --channel <n> --on|--off --commit` (master by default).
+Builder: `packet.build_mute(ch, mute)`.
+
+### Phase invert — SOLVED 2026-07-06 (CMD 0x05 selector 0x02)
+
+A member of the channel-flag family above. Live-captured by toggling
+channel 6's phase invert in the app:
+
+```
+180° (invert): e0 a2 05 00 b7 06 02 01 a0
+  0° (normal): e0 a2 05 00 b7 06 02 00 9f
+```
+
+byte[6]=`0x02`, byte[7]=`01` (180°) / `00` (0°). Both byte-perfect incl.
+checksum. Only channel 6 live-verified; other channels follow from the
+shared `channel_addr` addressing.
+
+CLI: `write phase --channel <n> --invert|--normal --commit`. Builder:
+`packet.build_phase(ch, invert)`.
+
+### Bridge CH7+CH8 — SOLVED 2026-07-06 (CMD 0x1c, not a channel flag)
+
+Bridging is only available for the CH7+CH8 pair on this hardware. Unlike
+mute/phase, it is **not** a channel-flag; it's **CMD 0x1c** with a fixed
+23-byte "walking-bit" payload, live-captured by toggling the bridge:
+
+```
+bridged:   e0 a2 1c 00 b7 00 28 01 00 02 00 04 00 08 00 10 00 20 00 c0 00 80 00 00 01 00 02 00 04 00 08 4d
+unbridged: e0 a2 1c 00 b7 00 28 01 00 02 00 04 00 08 00 10 00 20 00 40 00 80 00 00 01 00 02 00 04 00 08 cd
+                                                             ↑byte[19]                                  ↑csum[31]
+```
+
+- addr `0x00b7`, byte[6]=`0x28`, byte[7]=`0x01`
+- **only byte[19] changes**: bit `0x80` set = bridged (`0x40`→`0xc0`)
+- checksum at byte[31] = `(sum(pkt[4:31]) - 0x20) & 0xFF` — spans a wider
+  range than the short commands' `[4:13]`
+- the app also emits a companion **sub-`0x21`** CMD 0x1c packet that is
+  **constant** regardless of bridge state (a UI-sync, also seen at
+  enumeration — see the reclassification note below); not part of the write
+
+CLI: `write bridge --on|--off --commit`. Builder: `packet.build_bridge(on)`.
+
+The rest of the payload is treated as a fixed template (it never varied
+across captures). If a future capture shows it encoding other live state,
+revisit `BRIDGE_PAYLOAD_TEMPLATE`.
+
+### Master volume write — SOLVED 2026-07-05 (CMD 0x08, not WRITE_DSP)
+
+**CH0 `WRITE_DSP` (CMD `0x0a` sub `0x26`) is still DANGEROUS — do not send
+it.** It does not write volume; it force-switches the input source to high
+level (see below). The real master-volume write is a different, previously
+uncataloged command: **CMD `0x08` sub `0x0c`**.
+
+**How it was found.** Probing the live device to guess this write was ruled
+out after the 2026-07-04 misattribution below — instead we built a Linux
+`/dev/uhid` virtual-amplifier shim (`scripts/uhid_shim.py`,
+docs/LINUX_UHID_SHIM_PLAN.md) that impersonates the real device (VID/PID +
+interface-4 report descriptor) and replays known request/response pairs
+built from `usb1.pcapng`/`usb2.pcapng` (`scripts/build_replay_table.py` →
+`docs/replay_table.json`). Running the vendor Windows app under `wine` and
+dragging the Main fader against this fake device surfaced its actual write
+packet directly — no guessing, no live-device risk.
+
+**Wire format** (256-byte OUT payload):
+
+```
+[0:2]  e0 a2       magic
+[2]    08          CMD — new, distinct from WRITE_DSP (0x0a)
+[3]    00
+[4:6]  b7 00       ADDR LE = channel_addr(0) = 0x00b7 (CH0/master)
+[6]    0c          sub-byte (constant)
+[7:11] <float32 LE> target volume in dB
+[11]   <checksum>  (sum(payload[4:11]) - 0x20) & 0xFF — universal formula,
+                    just at a new offset (right after the float, not [8]/[13])
+[12:]  00 ...       zero padding; no [14:16] trailer like WRITE_DSP has
+```
+
+Verified byte-perfect across 17 live samples spanning −35.9…−0.98 dB
+(6 from an exploratory drag, 11 from a live sweep), each independently
+checksum-matched. A final blind check — asked the user to drag the fader to
+"−20.0 dB" on the app's own UI without telling them the decode formula —
+landed on **−20.02 dB**, confirming the float offset and sign convention.
+
+Unlike `WRITE_DSP` (which stages a value and needs a `CMD 0x05` commit
+trigger), **no separate commit packet was observed** after any of the 17
+master-volume writes — this command applies immediately.
+
+CLI: `write master --db <value> --commit`. Builder:
+`packet.build_write_master_volume(volume_db)`.
+
+Positive dB values (0…+6, the top of the Main range) are untested live —
+expected to work symmetrically given plain IEEE-754 float encoding, but
+unconfirmed.
+
+#### CH0 `WRITE_DSP` misattribution (retracted 2026-07-05, kept for history)
+
+The 2026-07-04 claim that `WRITE_DSP sub 0x26` to CH0 writes the master
+volume is **wrong**. Live re-testing 2026-07-05 showed:
 
 ```
 OUT: e0 a2 0a 00 b7 00 26 00 40 9c 46 3c 0a 25 00 10   (WRITE_DSP CH0 "GAIN")
@@ -596,14 +754,9 @@ write switched the source, and −4.23 dB was the user's rescue knob-turn.
 The "staging semantics" and "byte→dB scale" conclusions from that run are
 retracted with it.
 
-**Do not send `CMD 0x0a` writes to `addr 0x00b7` (CH0).** How the vendor
-app writes the Main fader (and selects sources — the EXE has
-`on_soundSourceChanged` / `on_SwitchChanged_*` Qt slots) is unknown —
-decode it offline (Ghidra, or USBPcap the app dragging the Main fader);
-do not probe the live device.
-
-CLI: `write gain --channel 0` still builds the packet for research but must
-not be committed against a live device.
+**Do not send `CMD 0x0a` writes to `addr 0x00b7` (CH0)** — use `write
+master` instead. `write gain --channel 0` still builds the packet for
+research but must not be committed against a live device.
 
 ---
 
@@ -620,8 +773,8 @@ capture plan. High-level outstanding items:
 - Routing matrix write commands
 - Speaker-type write (candidate: application-level type enum 0x1a, count=6, payload 0x01..0x06 for HF/MF/LF/MHF/MLF/FF — see EXE static analysis)
 - Exact meaning of cmd 0x08 (sub=0x0206 vs 0x8206 — two variants, both carry a bit-doubling data pattern)
-- Exact meaning of cmd 0x1c (addr=0x00b7, sub=0x0121 — handshake; payload is the same bit-doubling pattern)
-- Master volume **write scale** — command is solved (WRITE_DSP to CH0 + commit, see *Master volume write*); the byte→dB mapping still needs a calibration sweep. Note: CMD 0x04 SUB 0xa515 with a float in the data slot was tested live and is **ignored** by the device (keepalive data is inert)
+- cmd 0x1c is **partly solved**: sub=0x28 is the CH7+CH8 bridge write (see *Bridge CH7+CH8*). sub=0x21 is a constant companion/UI-sync packet (also seen at enumeration, previously guessed to be "handshake") — its full purpose and whether the device requires it is still open
+- Master volume write is solved (CMD 0x08 sub 0x0c, direct float32 dB — see *Master volume write*); positive dB range (0…+6) untested live. Note: CMD 0x04 SUB 0xa515 with a float in the data slot was tested live and is **ignored** by the device (keepalive data is inert)
 - Routing matrix byte layout (32 bytes, signed int8 per output, but exact input/output mapping unclear)
 - Q byte encoding (0x0a default; first EQ band uses different value e.g. 0x2b, 0x15)
 
@@ -635,13 +788,21 @@ capture plan. High-level outstanding items:
 | `8d 00` (0x008d) | 137 B | master-channel read (CMD 0x05 SUB 0x0004) |
 | `f6 00` (0x00f6) | 242 B | per-channel read (CMD 0x05 SUB 0xNN04) |
 
-### CMD 0x05 commit trigger — two variants observed
+### CMD 0x05 sub 0x0101 / 0x0001 — RECLASSIFIED as per-channel mute (2026-07-06)
 
-After a WRITE_DSP batch, the UI sends `CMD 0x05 addr=0xNNb7` with SUB in two
-forms: `0x0001` (REG_HI=0x00) and `0x0101` (REG_HI=0x01). Both clear the DSP
-buffer, but why two flavors exist is unclear — usb2 sent `0x0001` on channels
-that had **not** been written in the same capture, suggesting the address field
-tracks the currently selected UI channel rather than the write target.
+**Superseded.** These were previously believed to be a "DSP commit trigger"
+in two flavors. Live capture 2026-07-06 (uhid shim, toggling the app's
+per-channel mute buttons) showed they are **per-channel mute/unmute**:
+`0x0101` = mute (byte[7]=0x01), `0x0001` = unmute (byte[7]=0x00), addr
+`0xNNb7` selects the channel. See *Mute write* above.
+
+This explains the old puzzle — usb2 sending `0x0001` on channels that had
+**not** been written was the app unmuting them, unrelated to any DSP write.
+It also means **WRITE_DSP (HPF/gain) may not need a separate commit at all**
+(master volume, CMD 0x08, applies immediately with no commit). `build_dsp_commit`
+still emits `sub 0x0001`, which is now known to be an *unmute* of that channel;
+the HPF/gain write path should be re-examined against a live device to confirm
+whether any commit is required — treat the current commit step as suspect.
 
 ### Full unique command catalog from captures
 
