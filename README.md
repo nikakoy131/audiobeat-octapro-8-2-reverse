@@ -191,22 +191,37 @@ GitHub Actions (`release.yml`) builds a wheel + sdist and attaches them to the R
 | [`FINDINGS_EXE.md`](FINDINGS_EXE.md) | Analysis of the vendor Windows EXE (Qt/HID class structure) |
 | [`FINDINGS_WIRESHARK.md`](FINDINGS_WIRESHARK.md) | Analysis of `usb1.pcapng` and `usb2.pcapng` |
 
-## Project Roadmap
+## Project Roadmap (USB CLI App)
 
-- [x] USB HID handshake sequence documented (incl. mandatory session-open packet)
-- [x] Working transport against real hardware (pyusb/libusb on interface 4)
-- [x] Channel parameter readback (`CMD 0x05`) — live-verified
-- [x] HPF frequency/slope write (`CMD 0x0a`)
-- [x] Channel gain write (`CMD 0x0a`)
-- [x] Master volume write (`CMD 0x0a` to CH0 + commit) — live-verified
-- [x] knob-vol readback (remote knob, keepalive echo) — live-calibrated 0–35
-- [x] Master block (CH0) decoder — master volume + firmware banner
-- [x] 31-band EQ readback with per-band gain/Q display
-- [x] `.dat` preset file parser
-- [x] Alpha CLI (`octaproctl`) with research logging
-- [ ] Master volume write byte→dB scale calibration (single data point so far)
-- [ ] LPF frequency write (sub-address TBD)
-- [ ] EQ band gain/Q write
-- [ ] Routing matrix write
-- [ ] MUTE, phase, delay commands
-- [ ] Preset save/load
+### Completed Features (Read/Write over USB)
+- [x] **Handshake & Session Setup:** Connection probes and mandatory session-open sequencing.
+- [x] **Hardware Transport:** PyUSB interface claiming & SET_REPORT/GET_REPORT on Interface 4.
+- [x] **Master Volume Extraction:** Read master block (CH0) and knob volume from keepalive echoes.
+- [x] **Channel Block Readback:** Decode full 242-byte channel block (HPF/LPF, EQ table, routing matrix).
+- [x] **Preset Parsing:** Offline `.dat` preset parser supporting the `US002` format.
+- [x] **Parametric EQ Decoding:** Decode gain and frequencies for all 31 EQ bands.
+- [x] **Real-time Crossover Control:** Set HPF cut-off frequencies and slopes (12/36 dB/octave verified).
+- [x] **Real-time Gain Control:** Master volume and channel-specific output gain control.
+
+### Planned Features & Roadblocks
+- [ ] **Calibration & Testing:**
+  - Calibrate master volume byte $\leftrightarrow$ dB conversion scale.
+  - Document remaining slope codes corresponding to 6/18/24/30/42/48 dB/octave slopes.
+- [ ] **Crossover & Equalizer Expansion:**
+  - Write commands for **LPF Cutoff Frequency** and **LPF Slope** (capture sub-addresses near `0x07b7`).
+  - Discover filter algorithm selection (`Bessel` vs `Butterworth` vs `Linkwitz-Riley`).
+  - Write commands for **EQ Band Center Frequencies, Gains, and Q-Factors** (capture EQ band addresses).
+  - Support the **EQ Pass (bypass)** toggle.
+- [ ] **Channel Tuning & Mixer Routing:**
+  - Reverse-engineer and implement channel **Mute** toggles.
+  - Reverse-engineer and implement channel **Phase inversion** (0°/180°).
+  - Map and implement **Speaker Type** configurations.
+  - Discover **Time Delay** (alignment) address space and write command layout (0–20 ms).
+  - Support channel **Bridging** (mono summing CH7/CH8) and **Linking** configurations.
+  - Implement writing/applying the **Input Routing Matrix** levels (0–100% mix).
+- [ ] **Preset and Global Configuration:**
+  - Reverse-engineer **Input Source Switching** commands (APTX BT / U-disk / TOSLINK / High-level / RCA).
+  - Reverse-engineer **Noise Gate Threshold** configuration.
+  - Implement device **Preset Save & Recall** commands (invoking slots M1–M6 from the CLI).
+  - Support exporting/applying presets directly from `.dat` configuration files.
+
