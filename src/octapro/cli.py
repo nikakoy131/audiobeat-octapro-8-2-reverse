@@ -285,3 +285,85 @@ def write_gain(
     _setup(verbose, quiet, log_file)
     from octapro.commands.write import run_write_gain
     sys.exit(run_write_gain(channel=channel, db=db, commit=commit, no_keepalive=no_keepalive))
+
+
+@write_app.command(name="master")
+def write_master(
+    db: Annotated[float, typer.Option("--db", help="Master volume in dB (+6..-60).")],
+    commit: Annotated[
+        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
+    ] = False,
+    no_keepalive: _NoKA = False,
+    verbose: _Verbose = False,
+    quiet: _Quiet = False,
+    log_file: _LogFile = None,
+) -> None:
+    """Set master (Main) volume in dB. **Dry-run unless `--commit` is given.**"""
+    _setup(verbose, quiet, log_file)
+    from octapro.commands.write import run_write_master
+    sys.exit(run_write_master(db=db, commit=commit, no_keepalive=no_keepalive))
+
+
+@write_app.command(name="mute")
+def write_mute(
+    channel: Annotated[
+        int,
+        typer.Option(
+            "--channel", "-c", min=0, max=10,
+            help="Channel 1-10, or 0 = master/Main (only master is live-verified).",
+        ),
+    ] = 0,
+    on: Annotated[bool, typer.Option("--on/--off", help="Mute (--on) or unmute (--off).")] = True,
+    commit: Annotated[
+        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
+    ] = False,
+    no_keepalive: _NoKA = False,
+    verbose: _Verbose = False,
+    quiet: _Quiet = False,
+    log_file: _LogFile = None,
+) -> None:
+    """Mute or unmute a channel (master by default). **Dry-run unless `--commit`.**"""
+    _setup(verbose, quiet, log_file)
+    from octapro.commands.write import run_write_mute
+    sys.exit(run_write_mute(channel=channel, mute=on, commit=commit, no_keepalive=no_keepalive))
+
+
+@write_app.command(name="phase")
+def write_phase(
+    channel: Annotated[int, typer.Option("--channel", "-c", min=1, max=10, help="Channel 1-10.")],
+    invert: Annotated[
+        bool, typer.Option("--invert/--normal", help="180° invert (--invert) or 0° (--normal).")
+    ] = True,
+    commit: Annotated[
+        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
+    ] = False,
+    no_keepalive: _NoKA = False,
+    verbose: _Verbose = False,
+    quiet: _Quiet = False,
+    log_file: _LogFile = None,
+) -> None:
+    """Set channel phase (0° / 180°). **Dry-run unless `--commit` is given.**"""
+    _setup(verbose, quiet, log_file)
+    from octapro.commands.write import run_write_phase
+    sys.exit(
+        run_write_phase(channel=channel, invert=invert, commit=commit, no_keepalive=no_keepalive)
+    )
+
+
+@write_app.command(name="bridge")
+def write_bridge(
+    on: Annotated[
+        bool, typer.Option("--on/--off", help="Bridge CH7+CH8 (--on) or unbridge (--off).")
+    ] = True,
+    commit: Annotated[
+        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
+    ] = False,
+    no_keepalive: _NoKA = False,
+    verbose: _Verbose = False,
+    quiet: _Quiet = False,
+    log_file: _LogFile = None,
+) -> None:
+    """Bridge/unbridge CH7+CH8 (the only bridgeable pair). **Dry-run unless `--commit`.**"""
+    _setup(verbose, quiet, log_file)
+    from octapro.commands.write import run_write_bridge
+    sys.exit(run_write_bridge(bridged=on, commit=commit, no_keepalive=no_keepalive))

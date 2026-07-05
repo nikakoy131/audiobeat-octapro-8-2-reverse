@@ -93,11 +93,25 @@ is mandatory after connect — otherwise READ_BLOCK returns a short `ee 55` refu
 - `0x05` READ_BLOCK — read full channel state; wire bytes [6:8] are `04 CH`
   (LE u16 sub = `(CH << 8) | 0x04` — byte order matters, the checksum can't catch a swap)
 - `0x05` (addr=`0xNNb7`, sub=`0x01`) — DSP commit trigger after WRITE_DSP batch
+- `0x05` **channel-flag family** (addr=`0xNNb7`, byte[6]=selector,
+  byte[7]=`01`/`00`) — per-channel booleans, live-decoded 2026-07-06 via uhid
+  shim. Selectors: `0x01`=mute, `0x02`=phase invert, `0x0d`=master mute (ch0).
+  CLI: `write mute`, `write phase`. Builder: `build_channel_flag(ch, sel, on)`.
+  See PROTOCOL.md "CMD 0x05 channel-flag family".
 - `0x0a` WRITE_DSP — real-time DSP write; sub `0x05`=HPF freq, sub `0x26`=GAIN.
   Writes are staged: keepalive echo updates immediately, block only after commit.
   **DANGER: never send `0x0a` to CH0 (addr `0x00b7`)** — it force-switches the
-  input source to high level (payload ignored), not a volume write. The master
-  volume write command is still unknown (PROTOCOL.md "Master volume write").
+  input source to high level (payload ignored), not a volume write.
+- `0x08` WRITE_MASTER_VOLUME (sub `0x0c`, addr `0x00b7`) — the real master
+  volume write, live-captured 2026-07-05 via a Linux uhid shim (see
+  `docs/LINUX_UHID_SHIM_PLAN.md`, `scripts/uhid_shim.py`). Direct float32 dB
+  at `[7:11]`, checksum at `[11]`, applied immediately (no commit needed).
+  CLI: `write master --db <value> --commit`. See PROTOCOL.md "Master volume
+  write" for the full wire format.
+- `0x1c` BRIDGE (sub `0x28`, addr `0x00b7`) — bridge CH7+CH8 (only bridgeable
+  pair). Fixed 23-byte payload; state in byte[19] bit `0x80`, checksum at
+  byte[31] over `sum(pkt[4:31])`. CLI: `write bridge --on|--off`. Builder:
+  `build_bridge(on)`. (sub `0x21` is a constant companion, not the write.)
 
 **Master volume = one value per source, two controls** (resolved 2026-07-05): the
 software "Main" fader and the remote knob (0–35 steps) both show the CH0 block
@@ -138,7 +152,7 @@ See `CONTEXT_USER.md → Still to Capture` for the priority-ordered list. High-p
 - LPF write sub-address and TYPE_BYTE
 - EQ band gain/Q write addresses
 - Routing matrix write commands
-- MUTE, phase, delay, preset save/load
+- delay, preset save/load, EQ-pass (MUTE + PHASE + BRIDGE solved 2026-07-06; more CMD 0x05 selectors likely)
 - Slope code `0x01` meaning (seen on CH3/4 HPF in dsp_m2.dat)
 
 ## Analysis Tools (installed on this machine)

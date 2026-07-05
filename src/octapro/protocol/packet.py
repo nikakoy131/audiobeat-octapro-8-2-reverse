@@ -4,12 +4,26 @@ import struct
 from dataclasses import dataclass, field
 
 from octapro.protocol.constants import (
+    BRIDGE_CHECKSUM_OFFSET,
+    BRIDGE_PAYLOAD_TEMPLATE,
+    BRIDGE_STATE_BIT,
+    BRIDGE_STATE_OFFSET,
     CHANNEL_ADDR_BASE,
     CHANNEL_ADDR_STRIDE,
+    CMD_BRIDGE,
+    CMD_READ_BLOCK,
     CMD_WRITE_DSP,
+    CMD_WRITE_MASTER_VOLUME,
     KNOWN_STATUSES,
+    MUTE_OFF,
+    MUTE_ON,
     REG_KEEPALIVE,
     SESSION_OPEN_ADDR,
+    SUB_BRIDGE,
+    SUB_MASTER_VOLUME,
+    SUB_MUTE_CHANNEL,
+    SUB_MUTE_MASTER,
+    SUB_PHASE,
     SUB_SESSION_OPEN,
     WRITE_DSP_TRAILER,
 )
@@ -93,12 +107,121 @@ def build_write_dsp(
     return pkt
 
 
-def build_dsp_commit(ch: int) -> bytearray:
-    """CMD 0x05 with sub=0x01 — commit trigger to apply a WRITE_DSP batch.
+def build_write_master_volume(volume_db: float) -> bytearray:
+    """CMD 0x08 SUB 0x0c — direct master-volume write (CH0).
 
-    ch=0 commits a master write. A staged write shows in the keepalive echo
-    immediately but only lands in the master/channel block after this commit
-    (observed live on the master-volume write).
+    Live-captured 2026-07-05 via a Linux uhid shim impersonating the real
+    device and replaying the vendor Windows app's own Main-fader drag
+    traffic (see docs/LINUX_UHID_SHIM_PLAN.md). Byte-perfect across 17
+    samples spanning -35.9..-0.98 dB, each independently checksum-verified;
+    a final live check (drag to "-20.0 dB" on the app's UI) decoded to
+    -20.02 dB. Unlike WRITE_DSP (CMD 0x0a), no separate commit packet was
+    observed after any of these writes — this applies immediately.
+
+    Checksum sits at [11], right after the float, rather than [8] or [13]
+    like the other commands — but it's the same universal formula, and
+    compute_checksum(pkt) still gives the right answer here because bytes
+    [11:13] are still zero when it's called (summing pkt[4:13] with two
+    trailing zeros equals summing just pkt[4:11]).
+    """
+    pkt = bytearray(256)
+    pkt[0], pkt[1] = 0xE0, 0xA2
+    pkt[2] = CMD_WRITE_MASTER_VOLUME
+    pkt[3] = 0x00
+    struct.pack_into("<H", pkt, 4, channel_addr(0))
+    pkt[6] = SUB_MASTER_VOLUME
+    struct.pack_into("<f", pkt, 7, volume_db)
+    pkt[11] = compute_checksum(pkt)
+    return pkt
+
+
+def build_channel_flag(ch: int, selector: int, on: bool) -> bytearray:
+    """CMD 0x05 per-channel boolean flag (the mute / phase command family).
+
+    Live-captured 2026-07-06 via the uhid shim (docs/LINUX_UHID_SHIM_PLAN.md).
+    All members share one wire shape:
+        e0 a2 05 00 b7 NN <selector> <state> <csum>
+    where addr `0xNNb7` = channel_addr(ch), byte[6]=selector picks the
+    parameter, byte[7]=state (1=on, 0=off), byte[8]=checksum.
+
+    Known selectors (byte[6]):
+        0x01  per-channel mute       0x02  phase invert
+        0x0d  master mute (ch0 only)
+    """
+    pkt = _base_packet(CMD_READ_BLOCK, channel_addr(ch), 0)
+    pkt[6] = selector
+    pkt[7] = MUTE_ON if on else MUTE_OFF
+    pkt[8] = compute_checksum(pkt)
+    return pkt
+
+
+def build_mute(ch: int, mute: bool) -> bytearray:
+    """CMD 0x05 mute / unmute a channel (ch=0 = master/Main, 1..10 = DSP).
+
+    Live-captured 2026-07-06 via the uhid shim. **Master and per-channel mute
+    use different selector bytes** — an asymmetry, but both directly verified:
+
+        master  (ch0): e0 a2 05 00 b7 00 0d 01 a5   byte[6]=0x0d
+        channel (chN): e0 a2 05 00 b7 0N 01 01 ..   byte[6]=0x01
+
+    byte[7] is the state (1=mute, 0=unmute). Verified byte-perfect: master
+    on/off, and channels 2/6/10 mute + channel 6 unmute.
+
+    The per-channel form (byte[6]=0x01, i.e. LE u16 sub 0x0101/0x0001) is
+    the command PROTOCOL.md previously mislabelled a "DSP commit trigger" —
+    see build_dsp_commit's note; those captures were mute toggles.
+    """
+    selector = SUB_MUTE_MASTER if ch == 0 else SUB_MUTE_CHANNEL
+    return build_channel_flag(ch, selector, mute)
+
+
+def build_phase(ch: int, invert: bool) -> bytearray:
+    """CMD 0x05 phase invert for a channel (byte[6]=0x02, 1=180°, 0=0°).
+
+    Live-captured 2026-07-06 by toggling channel 6's phase in the app:
+        180°: e0 a2 05 00 b7 06 02 01 a0
+          0°: e0 a2 05 00 b7 06 02 00 9f
+    Both byte-perfect incl. checksum. Only channel 6 is live-verified; other
+    channels follow from the shared channel-flag addressing.
+    """
+    return build_channel_flag(ch, SUB_PHASE, invert)
+
+
+def build_bridge(bridged: bool) -> bytearray:
+    """CMD 0x1c — bridge CH7+CH8 (the only bridgeable pair on this device).
+
+    Live-captured 2026-07-06 by toggling the bridge in the app. Byte-perfect
+    for both states:
+        bridged:   e0 a2 1c 00 b7 00 28 01 ...00 c0 00 80... 4d
+        unbridged: e0 a2 1c 00 b7 00 28 01 ...00 40 00 80... cd
+    The payload is a fixed 23-byte template; only byte[19] carries the state
+    (bit 0x80 set = bridged) and the checksum at byte[31] follows. Unlike the
+    short commands, the checksum spans pkt[4:31].
+    """
+    pkt = bytearray(256)
+    pkt[0], pkt[1] = 0xE0, 0xA2
+    pkt[2] = CMD_BRIDGE
+    pkt[3] = 0x00
+    struct.pack_into("<H", pkt, 4, channel_addr(0))
+    pkt[6] = SUB_BRIDGE
+    pkt[7] = 0x01
+    pkt[8 : 8 + len(BRIDGE_PAYLOAD_TEMPLATE)] = BRIDGE_PAYLOAD_TEMPLATE
+    if bridged:
+        pkt[BRIDGE_STATE_OFFSET] |= BRIDGE_STATE_BIT
+    pkt[BRIDGE_CHECKSUM_OFFSET] = (sum(pkt[4:BRIDGE_CHECKSUM_OFFSET]) - 0x20) & 0xFF
+    return pkt
+
+
+def build_dsp_commit(ch: int) -> bytearray:
+    """CMD 0x05 with sub=0x01 — believed to commit a WRITE_DSP batch.
+
+    SUSPECT (2026-07-06): this packet (LE u16 sub 0x0001) is byte-identical
+    to a per-channel UNMUTE (see build_mute / PROTOCOL.md "Mute write").
+    Master volume (CMD 0x08) was shown to apply with no commit at all, so it
+    is unclear whether WRITE_DSP really needs this step or whether the
+    "commit" seen in captures was just the app unmuting the channel. Kept as
+    the HPF/gain write path still uses it; re-verify against a live device
+    before relying on it.
     """
     addr = channel_addr(ch)
     pkt = _base_packet(0x05, addr, 0x01)
