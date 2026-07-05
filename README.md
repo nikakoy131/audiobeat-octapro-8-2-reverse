@@ -25,8 +25,19 @@ The device uses **USB HID CONTROL** transfers (not interrupt) with 256-byte payl
 | `0x04` | `WRITE_PARAM` | Write to device registers (firmware read, keepalive, init). |
 | `0x05` | `READ_BLOCK` | Read full 256-byte parameter state of a channel (CH0 = master). |
 | `0x05` | session open | `addr=0x00b7 sub=0x1103` — mandatory first packet after connect. |
-| `0x05` | commit | `addr=0xNNb7 sub=0x01` — applies a staged `WRITE_DSP` batch. |
-| `0x0a` | `WRITE_DSP` | Real-time write of DSP RAM parameters (float32). CH0 = master volume. |
+| `0x05` | channel-flag | `addr=0xNNb7`, byte[6]=selector — per-channel booleans: `0x01`=mute, `0x02`=phase, `0x0d`=master mute. |
+| `0x08` | master volume | `addr=0x00b7 sub=0x0c` — the real Main-fader write (float32 dB, applies immediately). |
+| `0x0a` | `WRITE_DSP` | Real-time write of DSP RAM parameters (float32) — HPF/gain. |
+| `0x1c` | bridge | `addr=0x00b7 sub=0x28` — bridge CH7+CH8 (state in byte[19] bit `0x80`). |
+
+Commands for master volume, mute, phase, and bridge were captured 2026-07-05/06
+by impersonating the device with a Linux `uhid` shim (see
+[`docs/LINUX_UHID_SHIM_PLAN.md`](docs/LINUX_UHID_SHIM_PLAN.md) and
+`scripts/uhid_shim.py`) and replaying the vendor app's own traffic under wine —
+no live-device guessing.
+
+> ⚠️ **Never send `WRITE_DSP` (`0x0a`) to CH0** — it force-switches the input
+> source, it is **not** a master-volume write. Use `write master` (CMD `0x08`).
 
 ### Packet Structure (OUT)
 
@@ -35,7 +46,7 @@ The device uses **USB HID CONTROL** transfers (not interrupt) with 256-byte payl
 ```
 
 **Checksum:** `(sum(pkt[4:13]) - 0x20) & 0xFF`  
-Exception: CMD `0x0a` stores the checksum at byte **[13]**, not [8].
+Exceptions: CMD `0x0a` stores it at byte **[13]**; CMD `0x08` at **[11]**; CMD `0x1c` sums **[4:31]** and stores at **[31]**.
 
 See [`PROTOCOL.md`](PROTOCOL.md) for the full reference.
 
@@ -114,11 +125,16 @@ uv run octaproctl write hpf --channel 7 --freq 25
 # Write HPF — actually apply
 uv run octaproctl write hpf --channel 7 --freq 25 --commit
 
-# Write gain — dry run
+# Write channel gain — dry run
 uv run octaproctl write gain --channel 7 --db -3.0
 
-# Write MASTER volume (channel 0) — dry run; byte→dB scale still uncalibrated
-uv run octaproctl write gain --channel 0 --db -6.0
+# Write MASTER (Main) volume — the real command (CMD 0x08), dry run
+uv run octaproctl write master --db -6.0
+
+# Mute / phase / bridge — all dry-run unless --commit
+uv run octaproctl write mute --channel 7 --on
+uv run octaproctl write phase --channel 6 --invert
+uv run octaproctl write bridge --on            # CH7+CH8 (only bridgeable pair)
 ```
 
 ### All Commands
@@ -134,14 +150,18 @@ octaproctl parse-dat <file> [--channel N]             offline .dat preset decode
 octaproctl decode-pcap <file> [--out jsonl]           offline pcapng decode (needs tshark)
 octaproctl probe <hex> [--commit]                     send raw packet
 octaproctl write hpf --channel N --freq Hz [--slope C] [--commit]
-octaproctl write gain --channel N --db F [--commit]  N=0 writes master volume
+octaproctl write gain --channel N --db F [--commit]   channel output gain (N=1..10)
+octaproctl write master --db F [--commit]             master (Main) volume, CMD 0x08
+octaproctl write mute --channel N --on|--off [--commit]     N=0 = master mute
+octaproctl write phase --channel N --invert|--normal [--commit]
+octaproctl write bridge --on|--off [--commit]         CH7+CH8 bridge
 ```
 
 Global flags: `-v/--verbose`, `-q/--quiet`, `--log-file PATH`, `--no-keepalive`
 
 ### Read-Only by Default
 
-Every write command (`write hpf`, `write gain`, `probe`) defaults to **dry-run**:  
+Every write command defaults to **dry-run**:  
 it builds the packet, prints the hex + intent, and exits — without touching the device.  
 Add `--commit` to actually transmit.
 
@@ -190,6 +210,8 @@ GitHub Actions (`release.yml`) builds a wheel + sdist and attaches them to the R
 | [`FINDINGS_DAT.md`](FINDINGS_DAT.md) | Analysis of `dsp_m2.dat` (US002 preset format) |
 | [`FINDINGS_EXE.md`](FINDINGS_EXE.md) | Analysis of the vendor Windows EXE (Qt/HID class structure) |
 | [`FINDINGS_WIRESHARK.md`](FINDINGS_WIRESHARK.md) | Analysis of `usb1.pcapng` and `usb2.pcapng` |
+| [`docs/LINUX_UHID_SHIM_PLAN.md`](docs/LINUX_UHID_SHIM_PLAN.md) | The `uhid` virtual-amplifier capture rig (how the write commands were found) |
+| [`docs/HID_DESCRIPTORS.md`](docs/HID_DESCRIPTORS.md) | Live-dumped USB config + interface-4 HID report descriptors |
 
 ## Project Roadmap (USB CLI App)
 
@@ -201,23 +223,27 @@ GitHub Actions (`release.yml`) builds a wheel + sdist and attaches them to the R
 - [x] **Preset Parsing:** Offline `.dat` preset parser supporting the `US002` format.
 - [x] **Parametric EQ Decoding:** Decode gain and frequencies for all 31 EQ bands.
 - [x] **Real-time Crossover Control:** Set HPF cut-off frequencies and slopes (12/36 dB/octave verified).
-- [x] **Real-time Gain Control:** Master volume and channel-specific output gain control.
+- [x] **Real-time Gain Control:** Channel-specific output gain control.
+- [x] **Linux `uhid` capture rig:** Impersonate the device (VID/PID + iface-4 report descriptor)
+  so the vendor Windows app connects under wine and its write packets can be captured directly —
+  no live-device guessing. See [`docs/LINUX_UHID_SHIM_PLAN.md`](docs/LINUX_UHID_SHIM_PLAN.md).
+- [x] **Master Volume Write:** `write master` — CMD `0x08`, direct float32 dB (captured 2026-07-05).
+- [x] **Mute:** `write mute` — master and per-channel (CMD `0x05` channel-flag family, 2026-07-06).
+- [x] **Phase Inversion (0°/180°):** `write phase` (CMD `0x05` selector `0x02`, 2026-07-06).
+- [x] **CH7+CH8 Bridging:** `write bridge` (CMD `0x1c`, 2026-07-06).
 
 ### Planned Features & Roadblocks
-- [ ] **Calibration & Testing:**
-  - Calibrate master volume byte $\leftrightarrow$ dB conversion scale.
-  - Document remaining slope codes corresponding to 6/18/24/30/42/48 dB/octave slopes.
 - [ ] **Crossover & Equalizer Expansion:**
   - Write commands for **LPF Cutoff Frequency** and **LPF Slope** (capture sub-addresses near `0x07b7`).
+  - Document remaining slope codes corresponding to 6/18/24/30/42/48 dB/octave slopes.
   - Discover filter algorithm selection (`Bessel` vs `Butterworth` vs `Linkwitz-Riley`).
   - Write commands for **EQ Band Center Frequencies, Gains, and Q-Factors** (capture EQ band addresses).
   - Support the **EQ Pass (bypass)** toggle.
 - [ ] **Channel Tuning & Mixer Routing:**
-  - Reverse-engineer and implement channel **Mute** toggles.
-  - Reverse-engineer and implement channel **Phase inversion** (0°/180°).
+  - **Solo** per-channel toggles (likely another CMD `0x05` channel-flag selector).
+  - Confirm **per-channel fader** writes over USB (channel output gain, live-verified).
   - Map and implement **Speaker Type** configurations.
   - Discover **Time Delay** (alignment) address space and write command layout (0–20 ms).
-  - Support channel **Bridging** (mono summing CH7/CH8) and **Linking** configurations.
   - Implement writing/applying the **Input Routing Matrix** levels (0–100% mix).
 - [ ] **Preset and Global Configuration:**
   - Reverse-engineer **Input Source Switching** commands (APTX BT / U-disk / TOSLINK / High-level / RCA).
