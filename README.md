@@ -123,7 +123,7 @@ octaproctl parse-dat <file> [--channel N]             offline .dat preset decode
 octaproctl decode-pcap <file> [--out jsonl]           offline pcapng decode (needs tshark)
 octaproctl probe <hex> [--commit]                     send raw packet
 octaproctl write hpf --channel N --freq Hz [--slope C] [--commit]
-octaproctl write gain --channel N --db F [--commit]
+octaproctl write gain --channel N --db F [--commit]  N=0 writes master volume
 ```
 
 Global flags: `-v/--verbose`, `-q/--quiet`, `--log-file PATH`, `--no-keepalive`

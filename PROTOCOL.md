@@ -492,10 +492,39 @@ Note: the device has two volume controls — this tracks the *remote knob*
 (runtime volume); the app-side input/output max settings are separate.
 
 **Trailer checksum** at [16]: `(sum(resp[8:16]) − 0x70) & 0xFF` — fits all
-live samples (n=3: `0xa8`, `0xda`, `0x2f`); n is small, treat as hypothesis.
+live samples (n=4: `0xa8`, `0xda`, `0x2f`, `0x72`); treat as hypothesis.
 Different constant from the OUT checksum's `− 0x20`.
 
 CLI: `octaproctl read volume`.
+
+### Main volume write (LIVE-CONFIRMED 2026-07-04)
+
+Master volume is written exactly like a channel gain, aimed at **CH0**
+(`ADDR = 0x00b7`, the ch=0 case of the channel address formula):
+
+```
+OUT: e0 a2 0a 00 b7 00 26 00 40 9c 46 3c 0a 25 00 10   (WRITE_DSP CH0 GAIN byte=0x3c)
+IN:  02 00 ee bb ...                                    (ack)
+OUT: e0 a2 05 00 b7 00 01 00 98                         (commit trigger CH0)
+IN:  02 00 ee bb ...                                    (ack)
+```
+
+**Staging semantics** (observed): after the WRITE_DSP the keepalive float
+updates immediately, but the master block (CH0 read, data[9:13]) still holds
+the old value — it changes only after the commit trigger.
+
+**Scale caveat — master byte→dB mapping differs from channels.** Byte `0x3c`
+(−6.0 dB on the per-channel `(byte−0x78)/10` scale) landed at **−4.23 dB**.
+Best-fit hypothesis: the master quantizes to the remote-knob table —
+−4.23 dB ≈ knob step 24, and `0x3c` = 60 = 24 × 2.5, suggesting
+`knob_step = byte / 2.5`. Needs a calibration sweep (single data point).
+
+Side observation: after a USB master write, keepalive response bytes [10:12]
+flipped from `01 02` to `01 00` — possibly a "set via USB vs knob" source
+flag; unverified.
+
+CLI: `octaproctl write gain --channel 0 --db <dB>` (dry-run by default;
+fires a `master_gain_scale` research warning until the scale is calibrated).
 
 ---
 
@@ -513,7 +542,7 @@ capture plan. High-level outstanding items:
 - Speaker-type write (candidate: application-level type enum 0x1a, count=6, payload 0x01..0x06 for HF/MF/LF/MHF/MLF/FF — see EXE static analysis)
 - Exact meaning of cmd 0x08 (sub=0x0206 vs 0x8206 — two variants, both carry a bit-doubling data pattern)
 - Exact meaning of cmd 0x1c (addr=0x00b7, sub=0x0121 — handshake; payload is the same bit-doubling pattern)
-- Main volume **write** — read side is solved (see *Main volume readback*); write command probably reuses CMD 0x04 SUB 0xa515 with a float in the data slot, unverified
+- Main volume **write scale** — command is solved (WRITE_DSP to CH0 + commit, see *Main volume write*); the byte→dB mapping still needs a calibration sweep. Note: CMD 0x04 SUB 0xa515 with a float in the data slot was tested live and is **ignored** by the device (keepalive data is inert)
 - Routing matrix byte layout (32 bytes, signed int8 per output, but exact input/output mapping unclear)
 - Q byte encoding (0x0a default; first EQ band uses different value e.g. 0x2b, 0x15)
 

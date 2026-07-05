@@ -93,7 +93,10 @@ is mandatory after connect — otherwise READ_BLOCK returns a short `ee 55` refu
 - `0x05` READ_BLOCK — read full channel state; wire bytes [6:8] are `04 CH`
   (LE u16 sub = `(CH << 8) | 0x04` — byte order matters, the checksum can't catch a swap)
 - `0x05` (addr=`0xNNb7`, sub=`0x01`) — DSP commit trigger after WRITE_DSP batch
-- `0x0a` WRITE_DSP — real-time DSP write; sub `0x05`=HPF freq, sub `0x26`=GAIN
+- `0x0a` WRITE_DSP — real-time DSP write; sub `0x05`=HPF freq, sub `0x26`=GAIN.
+  Channel 0 (addr `0x00b7`) = **master volume** (live-verified; byte→dB scale differs
+  from channels and is uncalibrated — see PROTOCOL.md "Main volume write").
+  Writes are staged: keepalive echo updates immediately, block only after commit.
 
 **Known slope codes:** `0x03`=12 dB/oct, `0x05`=36 dB/oct, `0x01`=unknown (seen in dsp_m2.dat CH3/4)
 

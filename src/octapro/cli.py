@@ -262,7 +262,13 @@ def write_hpf(
 
 @write_app.command(name="gain")
 def write_gain(
-    channel: Annotated[int, typer.Option("--channel", "-c", min=1, max=10, help="Channel 1-10.")],
+    channel: Annotated[
+        int,
+        typer.Option(
+            "--channel", "-c", min=0, max=10,
+            help="Channel 1-10, or 0 = master volume (byte→dB scale differs, see PROTOCOL.md).",
+        ),
+    ],
     db: Annotated[float, typer.Option("--db", help="Gain in dB.")],
     commit: Annotated[
         bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
