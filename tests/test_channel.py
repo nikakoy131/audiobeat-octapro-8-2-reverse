@@ -73,3 +73,32 @@ class TestParseChannelBlock:
         raw = _build_block()
         block = parse_channel_block(raw, ch=1)
         assert "bytes_33_39" in block.unknown_bytes
+
+
+class TestParseMasterBlock:
+    """Fixture = exact 137-byte master block dumped from the live device
+    2026-07-04 (remote knob at 35 -> main volume +6.0 dB)."""
+
+    LIVE_BLOCK = bytes.fromhex(
+        "005555555555000201" "0000c040" "00000000000000000000000000000000"
+        "b0c200"
+        "0000010100010002000400080010002000400080000001000201000200000201"
+        "01ffff030000010002000400080010002000400080000001000200000000"
+        "27413233392d412d44503630332d55352e362d3235303131302d445350313435322d424d50383835"
+        "8c0000"
+    )
+
+    def test_fixture_length(self):
+        assert len(self.LIVE_BLOCK) == 137
+
+    def test_volume(self):
+        from octapro.protocol.channel import parse_master_block
+
+        block = parse_master_block(self.LIVE_BLOCK)
+        assert block.volume_db == 6.0
+
+    def test_firmware(self):
+        from octapro.protocol.channel import parse_master_block
+
+        block = parse_master_block(self.LIVE_BLOCK)
+        assert block.firmware == "A239-A-DP603-U5.6-250110-DSP1452-BMP885"
