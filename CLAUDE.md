@@ -94,14 +94,17 @@ is mandatory after connect — otherwise READ_BLOCK returns a short `ee 55` refu
   (LE u16 sub = `(CH << 8) | 0x04` — byte order matters, the checksum can't catch a swap)
 - `0x05` (addr=`0xNNb7`, sub=`0x01`) — DSP commit trigger after WRITE_DSP batch
 - `0x0a` WRITE_DSP — real-time DSP write; sub `0x05`=HPF freq, sub `0x26`=GAIN.
-  Channel 0 (addr `0x00b7`) = **master volume** (live-verified; byte→dB scale differs
-  from channels and is uncalibrated — see PROTOCOL.md "Main volume write").
   Writes are staged: keepalive echo updates immediately, block only after commit.
+  **DANGER: never send `0x0a` to CH0 (addr `0x00b7`)** — it force-switches the
+  input source to high level (payload ignored), not a volume write. The master
+  volume write command is still unknown (PROTOCOL.md "Master volume write").
 
-**Master volume = one register, two controls** (resolved 2026-07-05): the software
-"Main" fader and the remote knob (0–35 steps) both drive the CH0 block float [9:13]
-(= keepalive echo float). CLI keeps two views: `read master` (CH0 block) and
-`read knob-vol` (keepalive). CH0 block [27:31] float = factory noise gate (−88.0).
+**Master volume = one value per source, two controls** (resolved 2026-07-05): the
+software "Main" fader and the remote knob (0–35 steps) both show the CH0 block
+float [9:13] (= keepalive echo float); each input source stores its own level.
+CLI: `read master` (CH0 block), `read knob-vol` (keepalive; also shows the input
+source — keepalive byte [11]: 0=high level, 1=low level, 2=opt, 3=USB AUDIO).
+CH0 block [27:31] float = factory noise gate (−88.0).
 
 **Known slope codes:** `0x03`=12 dB/oct, `0x05`=36 dB/oct, `0x01`=unknown (seen in dsp_m2.dat CH3/4)
 
