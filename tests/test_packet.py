@@ -139,6 +139,45 @@ class TestParseKeepaliveKnobVol:
         assert vol == 6.0 and not ok
 
 
+class TestParseKeepaliveSource:
+    """Keepalive byte [11] = input source ID; live-mapped 2026-07-05 by
+    cycling the remote panel's source menu."""
+
+    def _resp(self, source_id: int, float_hex: str, trailer: int) -> bytes:
+        head = bytes.fromhex("0f00e0a20b00b000150001") + bytes([source_id])
+        return head + bytes.fromhex(float_hex) + bytes([trailer]) + bytes(256 - 17)
+
+    def test_opt(self):
+        from octapro.protocol.packet import parse_keepalive_source
+
+        # live raw: 15 00 01 02 | 29 5c 8f 3f | fb  (opt, knob 30)
+        assert parse_keepalive_source(self._resp(0x02, "295c8f3f", 0xFB)) == 0x02
+
+    def test_low_level(self):
+        from octapro.protocol.packet import parse_keepalive_source
+
+        # live raw: 15 00 01 01 | 00 00 00 00 | a7  (low level, 0.0 dB)
+        assert parse_keepalive_source(self._resp(0x01, "00000000", 0xA7)) == 0x01
+
+    def test_usb_audio(self):
+        from octapro.protocol.packet import parse_keepalive_source
+
+        # live raw: 15 00 01 03 | 00 00 20 c1 | 8a  (USB AUDIO, -10.0 dB)
+        assert parse_keepalive_source(self._resp(0x03, "000020c1", 0x8A)) == 0x03
+
+    def test_live_trailers_validate(self):
+        # the three live captures above must also pass the trailer checksum
+        from octapro.protocol.packet import parse_keepalive_knob_vol
+
+        for sid, fhex, trailer in [
+            (0x02, "295c8f3f", 0xFB),
+            (0x01, "00000000", 0xA7),
+            (0x03, "000020c1", 0x8A),
+        ]:
+            _, ok = parse_keepalive_knob_vol(self._resp(sid, fhex, trailer))
+            assert ok
+
+
 class TestBuildSessionOpen:
     def test_wire_bytes_match_capture(self):
         # usb1.pcapng frame 107 — first packet the vendor app sends

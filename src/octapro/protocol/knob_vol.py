@@ -1,12 +1,13 @@
 """knob-vol mapping: remote knob step (0-35) ↔ dB.
 
 Terminology: knob-vol = the remote panel knob; the software "Main" fader
-is the *master* (CH0) and is a separate control — see PROTOCOL.md.
+is the *master* (CH0). Both control the same volume register — see
+PROTOCOL.md "Volume terminology". Each input source stores its own level.
 
 The firmware uses an audio-taper lookup table, not a formula. Anchors below
-were live-calibrated 2026-07-04 by stepping the physical remote knob and
+were live-calibrated 2026-07-04/05 by stepping the physical remote knob and
 reading the float32 echoed in the keepalive response (PROTOCOL.md,
-"Main volume readback"). Between anchors the step is linearly interpolated —
+"knob-vol readback"). Between anchors the step is linearly interpolated —
 exact only at the anchors until more positions are sampled.
 """
 
@@ -18,7 +19,9 @@ KNOB_CALIBRATION: list[tuple[int, float]] = [
     (0, -60.00),
     (5, -33.17),
     (15, -14.19),
+    (18, -10.00),  # 2026-07-05: panel showed 18 on USB AUDIO source
     (25, -3.33),
+    (29, 0.00),    # 2026-07-05: panel showed 29 on low level source
     (30, 1.12),
     (34, 5.11),
     (35, 6.00),
