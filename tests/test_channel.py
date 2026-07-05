@@ -97,6 +97,14 @@ class TestParseMasterBlock:
         block = parse_master_block(self.LIVE_BLOCK)
         assert block.volume_db == 6.0
 
+    def test_noise_gate(self):
+        # float32 at [27:31] = -88.0 — matches the factory "Noise gate
+        # threshold" dialog on manual p.9; identical in usb1.pcapng frame 162
+        from octapro.protocol.channel import parse_master_block
+
+        block = parse_master_block(self.LIVE_BLOCK)
+        assert block.noise_gate_db == -88.0
+
     def test_firmware(self):
         from octapro.protocol.channel import parse_master_block
 

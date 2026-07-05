@@ -96,7 +96,10 @@ def run_read_master(no_keepalive: bool = False) -> int:
             table = Table(title="Master (CH0)", show_header=False, min_width=44)
             table.add_column("Field", style="bold")
             table.add_column("Value")
-            table.add_row("Master volume", f"{block.volume_db:+.2f} dB  (software Main fader)")
+            table.add_row(
+                "Master volume", f"{block.volume_db:+.2f} dB  (Main fader = remote knob)"
+            )
+            table.add_row("Noise gate", f"{block.noise_gate_db:+.1f} dB  (factory-set)")
             table.add_row("Firmware", block.firmware or "(not present)")
             table.add_row("Status / dlen", f"0x{ip.status:04x} / {ip.data_len}")
             console.print(table)
@@ -113,9 +116,11 @@ def run_read_master(no_keepalive: bool = False) -> int:
 def run_read_knob_vol(no_keepalive: bool = False) -> int:
     """Read knob-vol — the remote-knob volume echoed in the keepalive.
 
-    Distinct from the master (software "Main" fader, CH0): a CH0 master
-    write also moved this float, so whether they are one register or two
-    coupled values is still undetermined.
+    Resolved 2026-07-05: knob-vol and the master (software "Main" fader,
+    CH0) are two controls for the SAME volume register — manual p.14 says
+    the knob "adjusts the main volume (0-35)", and live tests show both
+    views move together byte-for-byte. This command reads it from the
+    keepalive echo; `read master` reads it from the CH0 block.
     """
     from rich.console import Console
     from rich.table import Table

@@ -98,6 +98,11 @@ is mandatory after connect — otherwise READ_BLOCK returns a short `ee 55` refu
   from channels and is uncalibrated — see PROTOCOL.md "Main volume write").
   Writes are staged: keepalive echo updates immediately, block only after commit.
 
+**Master volume = one register, two controls** (resolved 2026-07-05): the software
+"Main" fader and the remote knob (0–35 steps) both drive the CH0 block float [9:13]
+(= keepalive echo float). CLI keeps two views: `read master` (CH0 block) and
+`read knob-vol` (keepalive). CH0 block [27:31] float = factory noise gate (−88.0).
+
 **Known slope codes:** `0x03`=12 dB/oct, `0x05`=36 dB/oct, `0x01`=unknown (seen in dsp_m2.dat CH3/4)
 
 ## Adding New Write Commands
