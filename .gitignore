@@ -33,3 +33,6 @@ htmlcov/
 .vscode/
 *.swp
 .analysis/
+
+# macOS
+.DS_Store
