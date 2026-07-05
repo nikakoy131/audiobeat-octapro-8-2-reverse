@@ -1,4 +1,7 @@
-"""Main-volume mapping: remote knob step (0-35) ↔ dB.
+"""knob-vol mapping: remote knob step (0-35) ↔ dB.
+
+Terminology: knob-vol = the remote panel knob; the software "Main" fader
+is the *master* (CH0) and is a separate control — see PROTOCOL.md.
 
 The firmware uses an audio-taper lookup table, not a formula. Anchors below
 were live-calibrated 2026-07-04 by stepping the physical remote knob and
