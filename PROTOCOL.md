@@ -48,6 +48,11 @@ Full interface map: 0 = audio control, 1/2 = audio streaming (USB Audio),
 3 = HID consumer-control (volume/track/mute remote, 1-byte input report),
 4 = HID DSP command channel (this protocol).
 
+Interface 4's HID report descriptor (256-byte In + Out reports, 1-byte
+Feature report, Usage Page `0xFF00`, no report IDs) and the full config
+descriptor are dumped in [`docs/HID_DESCRIPTORS.md`](docs/HID_DESCRIPTORS.md)
+— needed to build a virtual-device shim that the vendor app will enumerate.
+
 ---
 
 ## Packet Structure
