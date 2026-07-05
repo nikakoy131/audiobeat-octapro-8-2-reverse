@@ -95,18 +95,27 @@ def run_write_gain(
     label = "MASTER" if channel == 0 else f"CH{channel}"
     intent = f"{label} GAIN → {db:+.1f} dB  (byte=0x{gain_byte:02x})"
     if channel == 0:
-        # master accepts the write but maps the byte on a different scale:
-        # 0x3c (ch-scale -6.0 dB) landed at -4.23 dB — see PROTOCOL.md
+        # Live-tested 2026-07-05: this packet does NOT write master volume —
+        # it force-switches the input source to high level (payload ignored).
+        # See PROTOCOL.md "Master volume write — UNSOLVED".
         warn_unknown(
-            "master_gain_scale",
+            "master_gain_write_blocked",
             f"0x{gain_byte:02x}",
-            f"requested {db:+.1f} dB — master byte→dB mapping differs from "
-            "channel scale and is not yet calibrated",
+            "CH0 WRITE_DSP switches input source to high level instead of "
+            "writing volume — commit refused; dry-run only",
         )
 
     if not commit:
         _dry_run_print(intent, bytes(pkt))
         return 0
+
+    if channel == 0:
+        log.error(
+            "Refusing to commit: CH0 WRITE_DSP is not a volume write — it "
+            "force-switches the input source to high level (PROTOCOL.md). "
+            "The real master volume write command is still unknown."
+        )
+        return 1
 
     from octapro.transport.hid import HidTransport
 

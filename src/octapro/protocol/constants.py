@@ -49,6 +49,15 @@ KNOWN_STATUSES: Final[frozenset[int]] = frozenset({
     STATUS_FIRMWARE, STATUS_MASTER, STATUS_CHANNEL,
 })
 
+# Input source IDs — keepalive byte [11]; live-mapped 2026-07-05 by cycling
+# the remote panel's source menu (IDs follow the menu order)
+SOURCE_NAMES: Final[dict[int, str]] = {
+    0x00: "high level",
+    0x01: "low level",
+    0x02: "opt",
+    0x03: "USB AUDIO",
+}
+
 # Channel addressing
 NUM_CHANNELS: Final = 10
 CHANNEL_ADDR_BASE: Final = 0x00B7

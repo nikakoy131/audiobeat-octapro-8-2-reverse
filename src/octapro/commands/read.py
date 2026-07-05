@@ -126,8 +126,13 @@ def run_read_knob_vol(no_keepalive: bool = False) -> int:
     from rich.table import Table
 
     from octapro.logging import log_packet_in, log_packet_out, warn_unknown
-    from octapro.protocol.constants import REG_KEEPALIVE, STATUS_KEEPALIVE
-    from octapro.protocol.packet import InPacket, build_keepalive, parse_keepalive_knob_vol
+    from octapro.protocol.constants import REG_KEEPALIVE, SOURCE_NAMES, STATUS_KEEPALIVE
+    from octapro.protocol.packet import (
+        InPacket,
+        build_keepalive,
+        parse_keepalive_knob_vol,
+        parse_keepalive_source,
+    )
     from octapro.transport.hid import HidTransport
 
     console = Console()
@@ -154,11 +159,17 @@ def run_read_knob_vol(no_keepalive: bool = False) -> int:
 
             knob, exact = db_to_knob(volume_db)
             knob_str = f"{knob}" if exact else f"≈{knob}  (interpolated)"
+            source_id = parse_keepalive_source(resp)
+            source_name = SOURCE_NAMES.get(source_id)
+            if source_name is None:
+                warn_unknown("source_id", f"0x{source_id:02x}", "keepalive byte [11]")
+                source_name = "unknown"
             table = Table(title="Knob Volume (remote)", show_header=False, min_width=40)
             table.add_column("Field", style="bold")
             table.add_column("Value")
             table.add_row("knob-vol", f"{volume_db:+.2f} dB")
             table.add_row("Knob position", f"{knob_str} of 0–35")
+            table.add_row("Input source", f"{source_name}  (0x{source_id:02x})")
             table.add_row("Range", "−60.0 … +6.0 dB")
             table.add_row("Raw float32", resp[12:16].hex(" "))
             console.print(table)

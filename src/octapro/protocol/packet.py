@@ -140,6 +140,17 @@ def parse_keepalive_knob_vol(resp: bytes) -> tuple[float, bool]:
     return volume_db, trailer_ok
 
 
+def parse_keepalive_source(resp: bytes) -> int:
+    """Input source ID from a keepalive IN packet, byte [11].
+
+    Live-mapped 2026-07-05 by cycling the remote panel's source menu:
+    0x00=high level, 0x01=low level, 0x02=opt, 0x03=USB AUDIO (menu order).
+    Each source stores its own knob-vol level — the volume float [12:16]
+    is the *current source's* level and changes on source switch.
+    """
+    return resp[11]
+
+
 # ---------------------------------------------------------------------------
 # IN packet parser
 # ---------------------------------------------------------------------------
