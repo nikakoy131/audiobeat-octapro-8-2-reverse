@@ -19,9 +19,10 @@ from octapro.protocol.constants import (
 # ---------------------------------------------------------------------------
 
 def channel_addr(ch: int) -> int:
-    """Return DSP channel base address for ch=1..10."""
-    if not 1 <= ch <= 10:
-        raise ValueError(f"channel must be 1..10, got {ch}")
+    """Return DSP channel base address. ch=0 is the master (main volume);
+    ch=1..10 are the DSP channels. Master gain write live-verified 2026-07-04."""
+    if not 0 <= ch <= 10:
+        raise ValueError(f"channel must be 0..10 (0=master), got {ch}")
     return CHANNEL_ADDR_BASE + ch * CHANNEL_ADDR_STRIDE
 
 
@@ -93,7 +94,12 @@ def build_write_dsp(
 
 
 def build_dsp_commit(ch: int) -> bytearray:
-    """CMD 0x05 with sub=0x01 — commit trigger to apply a WRITE_DSP batch."""
+    """CMD 0x05 with sub=0x01 — commit trigger to apply a WRITE_DSP batch.
+
+    ch=0 commits a master write. A staged write shows in the keepalive echo
+    immediately but only lands in the master/channel block after this commit
+    (observed live on the master-volume write).
+    """
     addr = channel_addr(ch)
     pkt = _base_packet(0x05, addr, 0x01)
     pkt[8] = compute_checksum(pkt)
