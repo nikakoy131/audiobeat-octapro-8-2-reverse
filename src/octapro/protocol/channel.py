@@ -15,6 +15,7 @@ EQ_BLOCK_OFFSET = 53  # byte 53 of the data payload
 
 MASTER_BLOCK_LEN = 137
 MASTER_VOLUME_OFFSET = 9    # float32 LE, same value the keepalive echoes
+MASTER_NOISE_GATE_OFFSET = 27  # float32 LE, factory noise gate threshold (manual p.9: −88)
 MASTER_FW_LEN_OFFSET = 94   # length-prefixed ASCII firmware banner follows
 
 
@@ -22,20 +23,27 @@ MASTER_FW_LEN_OFFSET = 94   # length-prefixed ASCII firmware banner follows
 class MasterBlock:
     raw: bytes
     volume_db: float
+    noise_gate_db: float
     firmware: str
 
 
 def parse_master_block(raw: bytes, warn: WarnFn | None = None) -> MasterBlock:
     """Parse the 137-byte master (CH0) data payload.
 
-    Known layout (live dump 2026-07-04):
+    Known layout (live dump 2026-07-04, cross-checked against usb1.pcapng frame 162 —
+    the two differ only in the volume float and the [134] trailer byte):
       [0:9]     prefix 00 55 55 55 55 55 00 02 01
-      [9:13]    float32 LE main volume dB (same value as keepalive echo)
-      [13:32]   unknown (zeros + b0 c2 at [29:31] in live dump)
-      [32:94]   unknown — contains two 01 00 02 00 04 00 ... 80 00 bit patterns
+      [9:13]    float32 LE main volume dB — THE master volume register; the software
+                "Main" fader (+6…−60 dB, manual p.10) and the remote-knob volume
+                (0–35 steps, manual p.14 "the rotate button adjusts the main volume")
+                are two controls for this one value
+      [13:27]   unknown (zeros in both dumps)
+      [27:31]   float32 LE noise gate threshold dB — factory-set, −88.0 in both dumps;
+                matches the "Noise gate threshold" dialog on manual p.9
+      [31:94]   unknown — contains two 01 00 02 00 04 00 ... 80 00 bit patterns
       [94]      firmware string length (0x27 = 39)
       [95:95+n] ASCII firmware banner
-      [134:137] trailer
+      [134:137] trailer ([134] varies between reads — checksum-like)
     """
     if len(raw) < MASTER_BLOCK_LEN and warn:
         warn("short_master_block", len(raw), f"expected {MASTER_BLOCK_LEN}")
@@ -44,6 +52,10 @@ def parse_master_block(raw: bytes, warn: WarnFn | None = None) -> MasterBlock:
         struct.unpack_from("<f", raw, MASTER_VOLUME_OFFSET)[0]
         if len(raw) >= MASTER_VOLUME_OFFSET + 4 else 0.0
     )
+    noise_gate_db: float = (
+        struct.unpack_from("<f", raw, MASTER_NOISE_GATE_OFFSET)[0]
+        if len(raw) >= MASTER_NOISE_GATE_OFFSET + 4 else 0.0
+    )
     firmware = ""
     if len(raw) > MASTER_FW_LEN_OFFSET:
         n = raw[MASTER_FW_LEN_OFFSET]
@@ -51,7 +63,7 @@ def parse_master_block(raw: bytes, warn: WarnFn | None = None) -> MasterBlock:
         firmware = chunk.decode("ascii", errors="replace")
         if not firmware.isprintable() and warn:
             warn("master_fw_banner", chunk.hex(), "non-printable firmware banner")
-    return MasterBlock(raw=raw, volume_db=volume_db, firmware=firmware)
+    return MasterBlock(raw=raw, volume_db=volume_db, noise_gate_db=noise_gate_db, firmware=firmware)
 
 
 @dataclass

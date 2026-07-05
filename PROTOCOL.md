@@ -465,14 +465,26 @@ persists in every subsequent keepalive until the next write.
 
 ### Volume terminology
 
-The device has **two volume controls** — do not conflate them:
+The device has **one master volume register** with **two controls**
+(RESOLVED 2026-07-05):
 - **knob-vol** — the remote panel knob (0–35 steps), echoed in the keepalive.
   CLI: `read knob-vol`.
 - **master** — the software "Main" fader (area C of the PC app) = **CH0**
   (addr `0x00b7`). CLI: `read master`, `write gain --channel 0`.
 
-Open question: a CH0 master write also moved the keepalive float, so whether
-knob-vol and master share one register or are two coupled values is TBD.
+Evidence that they are the same register:
+1. Manual p.14 (Wire Controller): "the rotate button adjusts the **main
+   volume (main volume 0-35)**" — the knob is explicitly the main volume.
+2. Manual p.10 (Main volume adjustment): Main fader range **+6 ~ −60 dB** —
+   exactly the live-calibrated knob endpoints.
+3. Live: turning the knob moves the CH0 block float [9:13] byte-for-byte in
+   step with the keepalive float; a USB CH0 gain write moves both as well.
+4. The full 137-byte CH0 block from usb1.pcapng (vendor app running) differs
+   from a live read only in the volume float and the [134] trailer byte —
+   there is no second volume-like field anywhere in the readback.
+
+The installer-style "set once" output limits are the **per-channel** gain
+faders (0…−40/OFF, stored in each channel block), not the Main fader.
 
 ### knob-vol readback (LIVE-CONFIRMED 2026-07-04)
 
@@ -498,15 +510,34 @@ Verified by stepping the physical remote knob across its range:
 
 Endpoints are exactly the manual's −60/+6 dB; the interior is an audio-taper
 lookup curve (≈1 dB/step near max, ≈1.9 dB/step near min), not a formula.
-The **same float** appears in the master block (CH0 read) at data bytes [9:13].
-Note: the device has two volume controls — this tracks the *remote knob*
-(runtime volume); the app-side input/output max settings are separate.
+The **same float** appears in the master block (CH0 read) at data bytes [9:13] —
+knob and Main fader are two controls for this one register (see *Volume
+terminology* above).
 
 **Trailer checksum** at [16]: `(sum(resp[8:16]) − 0x70) & 0xFF` — fits all
 live samples (n=4: `0xa8`, `0xda`, `0x2f`, `0x72`); treat as hypothesis.
 Different constant from the OUT checksum's `− 0x20`.
 
 CLI: `octaproctl read knob-vol`.
+
+### Master (CH0) block layout — status 0x008d, dlen 137
+
+| Offset | Type | Field |
+|---|---|---|
+| `[0:9]` | bytes | prefix `00 55 55 55 55 55 00 02 01` |
+| `[9:13]` | float32 LE | **main volume dB** — the shared master register |
+| `[13:27]` | — | unknown (zeros in both dumps) |
+| `[27:31]` | float32 LE | **noise gate threshold dB** — `−88.0`; matches the factory "Noise gate threshold" dialog (manual p.9, "factory set, do not operate by yourself") |
+| `[31:94]` | — | unknown — two `01 00 02 00 04 00 … 80 00` bit patterns |
+| `[94]` | u8 | firmware string length (`0x27` = 39) |
+| `[95:134]` | ASCII | firmware banner |
+| `[134]` | u8 | varies between reads — checksum-like |
+| `[135:137]` | — | zeros |
+
+Cross-checked: live read 2026-07-05 vs usb1.pcapng frame 162 (vendor app on
+Windows) — identical except the volume float and `[134]`.
+
+CLI: `octaproctl read master`.
 
 ### Master volume write — software Main fader, CH0 (LIVE-CONFIRMED 2026-07-04)
 
