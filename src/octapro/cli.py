@@ -199,17 +199,20 @@ def read_master(
     sys.exit(run_read_master(no_keepalive=no_keepalive))
 
 
-@read_app.command(name="volume")
-def read_volume(
+@read_app.command(name="knob-vol")
+def read_knob_vol(
     no_keepalive: _NoKA = False,
     verbose: _Verbose = False,
     quiet: _Quiet = False,
     log_file: _LogFile = None,
 ) -> None:
-    """Read the main volume (decoded from the keepalive response)."""
+    """Read the remote-knob volume (knob-vol, from the keepalive response).
+
+    Not the software "Main" fader — that is the master (CH0), see `read master`.
+    """
     _setup(verbose, quiet, log_file)
-    from octapro.commands.read import run_read_volume
-    sys.exit(run_read_volume(no_keepalive=no_keepalive))
+    from octapro.commands.read import run_read_knob_vol
+    sys.exit(run_read_knob_vol(no_keepalive=no_keepalive))
 
 
 # ---------------------------------------------------------------------------
