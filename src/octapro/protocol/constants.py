@@ -24,6 +24,50 @@ REG_INIT: Final = 0x9909
 SESSION_OPEN_ADDR: Final = 0x00B7
 SUB_SESSION_OPEN: Final = 0x1103
 
+# CMD 0x08 SUB 0x0c — direct master-volume write (CH0), live-captured 2026-07-05
+# via a Linux uhid shim replaying the vendor app's own Main-fader drag traffic.
+# CMD 0x08's other sub-family (0x06, e.g. addr=00b7 sub=0206/8206) is unrelated
+# and still unidentified — CMD_UNKNOWN_08 covers that one.
+CMD_WRITE_MASTER_VOLUME: Final = 0x08
+SUB_MASTER_VOLUME: Final = 0x0C
+
+# CMD 0x05 mute toggle, live-captured 2026-07-06 via the uhid shim
+# (docs/LINUX_UHID_SHIM_PLAN.md). byte[7]=state (1=mute, 0=unmute); addr
+# picks the target (0x00b7=master, 0xNNb7=channel N). Master and per-channel
+# use DIFFERENT sub-bytes at byte[6] — an asymmetry, but both live-verified:
+#   master  (ch0):  byte[6]=0x0d
+#   channel (chN):  byte[6]=0x01  (LE u16 sub 0x0101 mute / 0x0001 unmute)
+# The per-channel form is what earlier notes mislabelled a "commit trigger".
+SUB_MUTE_MASTER: Final = 0x0D
+SUB_MUTE_CHANNEL: Final = 0x01
+MUTE_ON: Final = 0x01
+MUTE_OFF: Final = 0x00
+
+# CMD 0x05 phase invert, live-captured 2026-07-06 (channel 6). Same channel-
+# flag family as mute: addr=0xNNb7, byte[6]=selector, byte[7]=state. byte[7]:
+# 1 = 180° (inverted), 0 = 0° (normal).
+SUB_PHASE: Final = 0x02
+
+# CMD 0x1c bridge (CH7+CH8 — the only bridgeable pair on this device),
+# live-captured 2026-07-06. addr=0x00b7, byte[6]=sub 0x28, then a fixed
+# 23-byte "walking-bit" payload [8:31] with the bridge state in byte[19]
+# (bit 0x80: set = bridged), checksum at byte[31] = (sum(pkt[4:31]) - 0x20).
+# The app also emits a companion sub-0x21 packet that never changes with
+# bridge state (a UI-sync/refresh, also seen during enumeration), so it is
+# not part of the write. Checksum spans [4:31], unlike the short commands'
+# [4:13] — compute it explicitly, not via compute_checksum().
+CMD_BRIDGE: Final = 0x1C
+SUB_BRIDGE: Final = 0x28
+BRIDGE_STATE_OFFSET: Final = 19       # byte[19]
+BRIDGE_STATE_BIT: Final = 0x80        # OR'd into byte[19] when bridged
+BRIDGE_CHECKSUM_OFFSET: Final = 31    # byte[31]
+# Fixed payload [8:31] captured live (unbridged base; byte[19]=0x40 here, at
+# index 11 of this slice). build_bridge sets/clears the 0x80 bit on top.
+BRIDGE_PAYLOAD_TEMPLATE: Final = bytes([
+    0x00, 0x02, 0x00, 0x04, 0x00, 0x08, 0x00, 0x10, 0x00, 0x20, 0x00, 0x40,
+    0x00, 0x80, 0x00, 0x00, 0x01, 0x00, 0x02, 0x00, 0x04, 0x00, 0x08,
+])
+
 # CMD 0x0a sub-addresses (known)
 SUB_HPF_FREQ: Final = 0x05
 SUB_GAIN: Final = 0x26
