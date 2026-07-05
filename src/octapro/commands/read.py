@@ -96,7 +96,7 @@ def run_read_master(no_keepalive: bool = False) -> int:
             table = Table(title="Master (CH0)", show_header=False, min_width=44)
             table.add_column("Field", style="bold")
             table.add_column("Value")
-            table.add_row("Main volume", f"{block.volume_db:+.2f} dB")
+            table.add_row("Master volume", f"{block.volume_db:+.2f} dB  (software Main fader)")
             table.add_row("Firmware", block.firmware or "(not present)")
             table.add_row("Status / dlen", f"0x{ip.status:04x} / {ip.data_len}")
             console.print(table)
@@ -110,13 +110,19 @@ def run_read_master(no_keepalive: bool = False) -> int:
     return 0
 
 
-def run_read_volume(no_keepalive: bool = False) -> int:
+def run_read_knob_vol(no_keepalive: bool = False) -> int:
+    """Read knob-vol — the remote-knob volume echoed in the keepalive.
+
+    Distinct from the master (software "Main" fader, CH0): a CH0 master
+    write also moved this float, so whether they are one register or two
+    coupled values is still undetermined.
+    """
     from rich.console import Console
     from rich.table import Table
 
     from octapro.logging import log_packet_in, log_packet_out, warn_unknown
     from octapro.protocol.constants import REG_KEEPALIVE, STATUS_KEEPALIVE
-    from octapro.protocol.packet import InPacket, build_keepalive, parse_keepalive_volume
+    from octapro.protocol.packet import InPacket, build_keepalive, parse_keepalive_knob_vol
     from octapro.transport.hid import HidTransport
 
     console = Console()
@@ -131,7 +137,7 @@ def run_read_volume(no_keepalive: bool = False) -> int:
             ip = InPacket(resp)
             if ip.status != STATUS_KEEPALIVE:
                 warn_unknown("in_status", f"0x{ip.status:04x}", "keepalive for volume read")
-            volume_db, trailer_ok = parse_keepalive_volume(resp)
+            volume_db, trailer_ok = parse_keepalive_knob_vol(resp)
             if not trailer_ok:
                 warn_unknown(
                     "keepalive_trailer",
@@ -139,15 +145,15 @@ def run_read_volume(no_keepalive: bool = False) -> int:
                     f"expected (sum(resp[8:16])-0x70)&0xff = "
                     f"0x{(sum(resp[8:16]) - 0x70) & 0xFF:02x}",
                 )
-            from octapro.protocol.volume import db_to_knob
+            from octapro.protocol.knob_vol import db_to_knob
 
             knob, exact = db_to_knob(volume_db)
             knob_str = f"{knob}" if exact else f"≈{knob}  (interpolated)"
-            table = Table(title="Main Volume", show_header=False, min_width=40)
+            table = Table(title="Knob Volume (remote)", show_header=False, min_width=40)
             table.add_column("Field", style="bold")
             table.add_column("Value")
-            table.add_row("Main volume", f"{volume_db:+.2f} dB")
-            table.add_row("Remote knob", f"{knob_str} of 0–35")
+            table.add_row("knob-vol", f"{volume_db:+.2f} dB")
+            table.add_row("Knob position", f"{knob_str} of 0–35")
             table.add_row("Range", "−60.0 … +6.0 dB")
             table.add_row("Raw float32", resp[12:16].hex(" "))
             console.print(table)
