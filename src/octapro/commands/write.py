@@ -78,7 +78,7 @@ def run_write_gain(
     commit: bool,
     no_keepalive: bool = False,
 ) -> int:
-    from octapro.logging import log_packet_in, log_packet_out
+    from octapro.logging import log_packet_in, log_packet_out, warn_unknown
     from octapro.protocol.constants import SUB_GAIN, TYPE_GAIN, WRITE_DSP_GAIN_FLOAT_REF
     from octapro.protocol.gain import db_to_byte
     from octapro.protocol.packet import build_dsp_commit, build_write_dsp, channel_addr
@@ -92,7 +92,17 @@ def run_write_gain(
         param_byte=gain_byte,
         type_byte=TYPE_GAIN,
     )
-    intent = f"CH{channel} GAIN → {db:+.1f} dB  (byte=0x{gain_byte:02x})"
+    label = "MASTER" if channel == 0 else f"CH{channel}"
+    intent = f"{label} GAIN → {db:+.1f} dB  (byte=0x{gain_byte:02x})"
+    if channel == 0:
+        # master accepts the write but maps the byte on a different scale:
+        # 0x3c (ch-scale -6.0 dB) landed at -4.23 dB — see PROTOCOL.md
+        warn_unknown(
+            "master_gain_scale",
+            f"0x{gain_byte:02x}",
+            f"requested {db:+.1f} dB — master byte→dB mapping differs from "
+            "channel scale and is not yet calibrated",
+        )
 
     if not commit:
         _dry_run_print(intent, bytes(pkt))

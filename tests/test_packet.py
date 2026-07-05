@@ -22,9 +22,13 @@ class TestChannelAddr:
     def test_ch10(self):
         assert channel_addr(10) == 0x0AB7
 
+    def test_master_ch0(self):
+        # ch0 = master volume — live-verified 2026-07-04
+        assert channel_addr(0) == 0x00B7
+
     def test_invalid(self):
         with pytest.raises(ValueError):
-            channel_addr(0)
+            channel_addr(-1)
         with pytest.raises(ValueError):
             channel_addr(11)
 
@@ -68,6 +72,39 @@ class TestBuildReadChannel:
     def test_master(self):
         pkt = build_read_channel(0)
         assert pkt[8] == 0x94 + 0
+
+
+class TestMasterVolumeWrite:
+    """Wire bytes live-verified 2026-07-04: master volume = gain write to CH0."""
+
+    def test_ch0_gain_write_bytes(self):
+        from octapro.protocol.packet import build_write_dsp, channel_addr
+
+        pkt = build_write_dsp(channel_addr(0), 0x26, 20000.0, 0x3C, 0x0A)
+        # sent live; device ACKed ee bb and staged the volume change
+        assert bytes(pkt[:16]) == bytes.fromhex("e0a20a00b7002600409c463c0a250010")
+
+    def test_ch0_commit_bytes(self):
+        from octapro.protocol.packet import build_dsp_commit
+
+        pkt = build_dsp_commit(0)
+        # sent live; commit applied the staged value to the master block
+        assert bytes(pkt[:9]) == bytes.fromhex("e0a20500b700010098")
+
+    def test_channel_addr_master(self):
+        from octapro.protocol.packet import channel_addr
+
+        assert channel_addr(0) == 0x00B7
+
+    def test_channel_addr_rejects_out_of_range(self):
+        import pytest
+
+        from octapro.protocol.packet import channel_addr
+
+        with pytest.raises(ValueError):
+            channel_addr(11)
+        with pytest.raises(ValueError):
+            channel_addr(-1)
 
 
 class TestParseKeepaliveVolume:
