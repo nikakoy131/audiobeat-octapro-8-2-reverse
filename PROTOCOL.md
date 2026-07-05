@@ -52,6 +52,7 @@ Interface 4's HID report descriptor (256-byte In + Out reports, 1-byte
 Feature report, Usage Page `0xFF00`, no report IDs) and the full config
 descriptor are dumped in [`docs/HID_DESCRIPTORS.md`](docs/HID_DESCRIPTORS.md)
 — needed to build a virtual-device shim that the vendor app will enumerate.
+Full shim design and rationale: [`docs/LINUX_UHID_SHIM_PLAN.md`](docs/LINUX_UHID_SHIM_PLAN.md).
 
 ---
 
