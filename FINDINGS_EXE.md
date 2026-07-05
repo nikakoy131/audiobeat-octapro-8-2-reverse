@@ -211,6 +211,44 @@ Log strings:
 
 ---
 
+## Main Volume Fader — hunt for the write command (2026-07-05)
+
+Goal: find the wire packet the PC app sends when the **Main** fader moves,
+since our CH0 `WRITE_DSP` guess turned out to switch the input source, not
+set volume (see PROTOCOL.md retraction).
+
+**Found:**
+- Main volume widget class = **`WidgetMainValume_2`** (MOC strings at file
+  0xf33f60). Slots: `on_valueChanged`, `on_itemSliderActivate`,
+  `on_MuteChanged`.
+- Its UI range setup is `fcn.0x00460da0`: immediates `0x40c00000` (+6.0
+  max), `0xc2700000` (−60.0 min), `0x3dcccccd` (0.1 step), suffix `"dB"`,
+  2 decimals. Confirms the fader is dB and matches our knob calibration
+  endpoints exactly — independent corroboration that knob-vol == Main.
+- Channel-gain DSP-write struct assembly is in `fcn.0x0044a843`: stores the
+  `0x469c4000` (20000.0) reference float + flag `1` into a parameter struct
+  (the same 20000.0 we send in channel gain writes).
+
+**Dead ends (documented so we don't repeat them):**
+- Packet headers (`e0 a2`) are **built at runtime**, not stored as data
+  templates. A binary search for `e0a2` in code returns only false
+  positives — they are the middle bytes of `call rel32` opcodes
+  (`e8 xx e0 a2 00`, targets in the 0x00e3xxxx/0x00e4xxxx range).
+- The session-open template `e0a20500b70003…` does not appear as a byte
+  string anywhere → no template table to diff against.
+- Slot → builder tracing is blocked by Qt MOC index-based dispatch in a
+  22 MB stripped MinGW binary; the value flows through Qt containers across
+  multi-KB functions, so a confident static read of the exact cmd/addr/sub
+  is high-effort and unverifiable without a live cross-check.
+
+**Recommended next step (higher ROI than more static RE):** capture the app
+live. On Windows, USBPcap the app while dragging *only* the Main fader (this
+is exactly how usb1/usb2 were captured) — one drag gives the packet directly.
+The macOS/libusb setup here can't help because the app needs Windows HID and
+the device's interface 4 is non-compliant. Until a Windows capture exists,
+the Main-volume **write** stays unknown; the **readback** (CH0 block / keep-
+alive float) is fully solved.
+
 ## Still Unknown from EXE
 
 - [ ] Full packet format for each slot (would need Ghidra/IDA decompilation)
