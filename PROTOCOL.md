@@ -465,23 +465,26 @@ persists in every subsequent keepalive until the next write.
 
 ### Volume terminology
 
-The device has **one master volume register** with **two controls**
-(RESOLVED 2026-07-05):
+The device has **one master volume value (per input source)** with **two
+controls** (RESOLVED 2026-07-05):
 - **knob-vol** — the remote panel knob (0–35 steps), echoed in the keepalive.
   CLI: `read knob-vol`.
 - **master** — the software "Main" fader (area C of the PC app) = **CH0**
-  (addr `0x00b7`). CLI: `read master`, `write gain --channel 0`.
+  (addr `0x00b7`). CLI: `read master`.
 
-Evidence that they are the same register:
+Evidence that they are the same value:
 1. Manual p.14 (Wire Controller): "the rotate button adjusts the **main
    volume (main volume 0-35)**" — the knob is explicitly the main volume.
 2. Manual p.10 (Main volume adjustment): Main fader range **+6 ~ −60 dB** —
    exactly the live-calibrated knob endpoints.
 3. Live: turning the knob moves the CH0 block float [9:13] byte-for-byte in
-   step with the keepalive float; a USB CH0 gain write moves both as well.
+   step with the keepalive float.
 4. The full 137-byte CH0 block from usb1.pcapng (vendor app running) differs
    from a live read only in the volume float and the [134] trailer byte —
    there is no second volume-like field anywhere in the readback.
+
+Nuance: the register holds the *current source's* level — each input source
+remembers its own knob-vol (see *Input source readback* below).
 
 The installer-style "set once" output limits are the **per-channel** gain
 faders (0…−40/OFF, stored in each channel block), not the Main fader.
@@ -539,34 +542,62 @@ Windows) — identical except the volume float and `[134]`.
 
 CLI: `octaproctl read master`.
 
-### Master volume write — software Main fader, CH0 (LIVE-CONFIRMED 2026-07-04)
+### Input source readback & per-source volume (LIVE-MAPPED 2026-07-05)
 
-Master volume is written exactly like a channel gain, aimed at **CH0**
-(`ADDR = 0x00b7`, the ch=0 case of the channel address formula):
+Keepalive response byte **[11]** is the current input source ID. Mapped by
+cycling the remote panel's source menu (IDs follow the menu order):
+
+| ID | Source | Stored knob-vol observed |
+|----|--------|--------------------------|
+| `0x00` | high level | 35 (+6.00 dB, max — likely pass-through default for head units) |
+| `0x01` | low level | 29 (0.00 dB) |
+| `0x02` | opt | 30 (+1.12 dB) |
+| `0x03` | USB AUDIO | 18 (−10.00 dB) |
+
+**Each source stores its own knob-vol level** — the keepalive float [12:16]
+is the *current source's* volume and changes when the source switches.
+(The panel's displayed knob step confirmed the taper table at two new
+anchors: step 29 = 0.00 dB, step 18 = −10.00 dB.)
+
+The PC-app source list also includes Bluetooth and U-disk (manual p.9); their
+IDs are unmapped (not in this unit's panel menu; presumably `0x04`/`0x05`).
+
+CLI: `octaproctl read knob-vol` shows the source name + ID.
+
+### Master volume write — UNSOLVED; CH0 gain write is DANGEROUS (retracted 2026-07-05)
+
+**RETRACTION.** The 2026-07-04 claim that `WRITE_DSP sub 0x26` to CH0 writes
+the master volume is **wrong**. Live re-testing 2026-07-05 showed:
 
 ```
-OUT: e0 a2 0a 00 b7 00 26 00 40 9c 46 3c 0a 25 00 10   (WRITE_DSP CH0 GAIN byte=0x3c)
-IN:  02 00 ee bb ...                                    (ack)
-OUT: e0 a2 05 00 b7 00 01 00 98                         (commit trigger CH0)
+OUT: e0 a2 0a 00 b7 00 26 00 40 9c 46 3c 0a 25 00 10   (WRITE_DSP CH0 "GAIN")
 IN:  02 00 ee bb ...                                    (ack)
 ```
 
-**Staging semantics** (observed): after the WRITE_DSP the keepalive float
-updates immediately, but the master block (CH0 read, data[9:13]) still holds
-the old value — it changes only after the commit trigger.
+The write's actual effect: it **force-switches the input source to
+high level** (keepalive [11]: `0x02` → `0x00`, confirmed on the panel),
+which *looks* like a volume jump because high level's stored knob-vol is
+max (see per-source volume above). The payload is ignored:
 
-**Scale caveat — master byte→dB mapping differs from channels.** Byte `0x3c`
-(−6.0 dB on the per-channel `(byte−0x78)/10` scale) landed at **−4.23 dB**.
-Best-fit hypothesis: the master quantizes to the remote-knob table —
-−4.23 dB ≈ knob step 24, and `0x3c` = 60 = 24 × 2.5, suggesting
-`knob_step = byte / 2.5`. Needs a calibration sweep (single data point).
+| Variant tested | Result |
+|---|---|
+| byte `0x3c`, `0x3f`, `0x19`, `0x01` (from opt) | source → high level, every time |
+| byte `0x02` (= opt ID, from high level) | no effect |
+| float `2.0` instead of `20000.0` | no effect |
 
-Side observation: after a USB master write, keepalive response bytes [10:12]
-flipped from `01 02` to `01 00` — possibly a "set via USB vs knob" source
-flag; unverified.
+The 2026-07-04 "byte 0x3c → −4.23 dB master write" was misattributed: the
+write switched the source, and −4.23 dB was the user's rescue knob-turn.
+The "staging semantics" and "byte→dB scale" conclusions from that run are
+retracted with it.
 
-CLI: `octaproctl write gain --channel 0 --db <dB>` (dry-run by default;
-fires a `master_gain_scale` research warning until the scale is calibrated).
+**Do not send `CMD 0x0a` writes to `addr 0x00b7` (CH0).** How the vendor
+app writes the Main fader (and selects sources — the EXE has
+`on_soundSourceChanged` / `on_SwitchChanged_*` Qt slots) is unknown —
+decode it offline (Ghidra, or USBPcap the app dragging the Main fader);
+do not probe the live device.
+
+CLI: `write gain --channel 0` still builds the packet for research but must
+not be committed against a live device.
 
 ---
 
