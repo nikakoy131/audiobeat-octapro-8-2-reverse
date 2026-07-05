@@ -116,7 +116,7 @@ uv run octaproctl write gain --channel 7 --db -3.0
 octaproctl info                                       device firmware + info
 octaproctl read channel <N|all>                       decode live channel block(s)
 octaproctl read master                                decode master (CH0) block
-octaproctl read volume                                main volume (from keepalive echo)
+octaproctl read knob-vol                              remote-knob volume (keepalive echo)
 octaproctl dump channel <N> [--annotate]              hex dump raw channel block
 octaproctl monitor [--interval 0.5]                   live poll + diff highlight
 octaproctl parse-dat <file> [--channel N]             offline .dat preset decode

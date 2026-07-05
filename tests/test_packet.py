@@ -107,7 +107,7 @@ class TestMasterVolumeWrite:
             channel_addr(-1)
 
 
-class TestParseKeepaliveVolume:
+class TestParseKeepaliveKnobVol:
     """Live-captured keepalive responses at known remote-knob positions."""
 
     def _resp(self, float_hex: str, trailer: int) -> bytes:
@@ -115,27 +115,27 @@ class TestParseKeepaliveVolume:
         return head + bytes.fromhex(float_hex) + bytes([trailer]) + bytes(256 - 17)
 
     def test_knob_35_max(self):
-        from octapro.protocol.packet import parse_keepalive_volume
+        from octapro.protocol.packet import parse_keepalive_knob_vol
 
-        vol, ok = parse_keepalive_volume(self._resp("0000c040", 0xA8))
+        vol, ok = parse_keepalive_knob_vol(self._resp("0000c040", 0xA8))
         assert vol == 6.0 and ok
 
     def test_knob_0_min(self):
-        from octapro.protocol.packet import parse_keepalive_volume
+        from octapro.protocol.packet import parse_keepalive_knob_vol
 
-        vol, ok = parse_keepalive_volume(self._resp("000070c2", 0xDA))
+        vol, ok = parse_keepalive_knob_vol(self._resp("000070c2", 0xDA))
         assert vol == -60.0 and ok
 
     def test_knob_34(self):
-        from octapro.protocol.packet import parse_keepalive_volume
+        from octapro.protocol.packet import parse_keepalive_knob_vol
 
-        vol, ok = parse_keepalive_volume(self._resp("1f85a340", 0x2F))
+        vol, ok = parse_keepalive_knob_vol(self._resp("1f85a340", 0x2F))
         assert abs(vol - 5.11) < 0.001 and ok
 
     def test_bad_trailer_flagged(self):
-        from octapro.protocol.packet import parse_keepalive_volume
+        from octapro.protocol.packet import parse_keepalive_knob_vol
 
-        vol, ok = parse_keepalive_volume(self._resp("0000c040", 0x00))
+        vol, ok = parse_keepalive_knob_vol(self._resp("0000c040", 0x00))
         assert vol == 6.0 and not ok
 
 

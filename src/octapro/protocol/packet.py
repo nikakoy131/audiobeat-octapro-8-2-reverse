@@ -121,12 +121,14 @@ def build_session_open() -> bytearray:
     return pkt
 
 
-def parse_keepalive_volume(resp: bytes) -> tuple[float, bool]:
-    """Decode main volume from a keepalive IN packet (status 0x000f).
+def parse_keepalive_knob_vol(resp: bytes) -> tuple[float, bool]:
+    """Decode knob-vol (remote-knob volume) from a keepalive IN packet (0x000f).
 
-    The keepalive response doubles as a main-volume readback: float32 LE dB
+    The keepalive response doubles as a knob-vol readback: float32 LE dB
     at [12:16], live-verified against the remote knob across its full range
     (knob 0 = -60.0 dB ... knob 35 = +6.0 dB, audio-taper curve between).
+    Note: a CH0 master write also moved this float — knob-vol vs master
+    (software Main fader) may be one register or two coupled values, TBD.
 
     Byte [16] is a response checksum: (sum(resp[8:16]) - 0x70) & 0xFF —
     fits all live samples so far (n=3); returned flag is False on mismatch.

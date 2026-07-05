@@ -463,9 +463,20 @@ After the first WRITE_DSP (0x0a) write, the keepalive payload `d[9:16]` echoes
 the last written parameter's data bytes (same bytes as 0x0a `d[9:16]`). The echo
 persists in every subsequent keepalive until the next write.
 
-### Main volume readback (LIVE-CONFIRMED 2026-07-04)
+### Volume terminology
 
-The keepalive response (status `0x000f`, dlen 11) carries the **main volume**
+The device has **two volume controls** — do not conflate them:
+- **knob-vol** — the remote panel knob (0–35 steps), echoed in the keepalive.
+  CLI: `read knob-vol`.
+- **master** — the software "Main" fader (area C of the PC app) = **CH0**
+  (addr `0x00b7`). CLI: `read master`, `write gain --channel 0`.
+
+Open question: a CH0 master write also moved the keepalive float, so whether
+knob-vol and master share one register or are two coupled values is TBD.
+
+### knob-vol readback (LIVE-CONFIRMED 2026-07-04)
+
+The keepalive response (status `0x000f`, dlen 11) carries **knob-vol**
 as float32 LE dB at bytes **[12:16]** of the raw IN packet:
 
 ```
@@ -473,7 +484,7 @@ as float32 LE dB at bytes **[12:16]** of the raw IN packet:
   status    dlen  addr    reg echo      float32 dB    trailer csum
 ```
 
-Verified by stepping the physical remote main-volume knob across its range:
+Verified by stepping the physical remote knob across its range:
 
 | Knob | dB | raw |
 |------|--------|-------------|
@@ -495,9 +506,9 @@ Note: the device has two volume controls — this tracks the *remote knob*
 live samples (n=4: `0xa8`, `0xda`, `0x2f`, `0x72`); treat as hypothesis.
 Different constant from the OUT checksum's `− 0x20`.
 
-CLI: `octaproctl read volume`.
+CLI: `octaproctl read knob-vol`.
 
-### Main volume write (LIVE-CONFIRMED 2026-07-04)
+### Master volume write — software Main fader, CH0 (LIVE-CONFIRMED 2026-07-04)
 
 Master volume is written exactly like a channel gain, aimed at **CH0**
 (`ADDR = 0x00b7`, the ch=0 case of the channel address formula):
@@ -542,7 +553,7 @@ capture plan. High-level outstanding items:
 - Speaker-type write (candidate: application-level type enum 0x1a, count=6, payload 0x01..0x06 for HF/MF/LF/MHF/MLF/FF — see EXE static analysis)
 - Exact meaning of cmd 0x08 (sub=0x0206 vs 0x8206 — two variants, both carry a bit-doubling data pattern)
 - Exact meaning of cmd 0x1c (addr=0x00b7, sub=0x0121 — handshake; payload is the same bit-doubling pattern)
-- Main volume **write scale** — command is solved (WRITE_DSP to CH0 + commit, see *Main volume write*); the byte→dB mapping still needs a calibration sweep. Note: CMD 0x04 SUB 0xa515 with a float in the data slot was tested live and is **ignored** by the device (keepalive data is inert)
+- Master volume **write scale** — command is solved (WRITE_DSP to CH0 + commit, see *Master volume write*); the byte→dB mapping still needs a calibration sweep. Note: CMD 0x04 SUB 0xa515 with a float in the data slot was tested live and is **ignored** by the device (keepalive data is inert)
 - Routing matrix byte layout (32 bytes, signed int8 per output, but exact input/output mapping unclear)
 - Q byte encoding (0x0a default; first EQ band uses different value e.g. 0x2b, 0x15)
 
@@ -550,7 +561,7 @@ capture plan. High-level outstanding items:
 
 | Status (LE, bytes 0..1 of IN payload) | `dlen` | Returned for |
 |---------------------------------------|--------|--------------|
-| `0f 00` (0x000f) | 11 B  | keepalive (CMD 0x04 SUB 0xa515) — payload echoes main-volume float32 |
+| `0f 00` (0x000f) | 11 B  | keepalive (CMD 0x04 SUB 0xa515) — payload echoes knob-vol float32 |
 | `2f 00` (0x002f) | 43 B  | handshake init (CMD 0x04 SUB 0x9909) — short firmware string |
 | `6a 00` (0x006a) | 102 B | firmware query (CMD 0x04 SUB 0x80f0) |
 | `8d 00` (0x008d) | 137 B | master-channel read (CMD 0x05 SUB 0x0004) |
