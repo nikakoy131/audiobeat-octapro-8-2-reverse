@@ -127,8 +127,10 @@ def parse_keepalive_knob_vol(resp: bytes) -> tuple[float, bool]:
     The keepalive response doubles as a knob-vol readback: float32 LE dB
     at [12:16], live-verified against the remote knob across its full range
     (knob 0 = -60.0 dB ... knob 35 = +6.0 dB, audio-taper curve between).
-    Note: a CH0 master write also moved this float — knob-vol vs master
-    (software Main fader) may be one register or two coupled values, TBD.
+    Resolved 2026-07-05: this is THE master volume register — the remote
+    knob and the software Main fader both control it (manual p.14: the
+    knob "adjusts the main volume (0-35)"; p.10: Main range +6…−60 dB).
+    The CH0 block float at [9:13] is the same value.
 
     Byte [16] is a response checksum: (sum(resp[8:16]) - 0x70) & 0xFF —
     fits all live samples so far (n=3); returned flag is False on mismatch.
