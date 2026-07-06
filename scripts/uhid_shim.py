@@ -400,9 +400,10 @@ class UhidShim:
             band = payload[6] - EQ_BAND_SUB_MIN + 1  # sub = 0x08 + (band-1)
             freq = struct.unpack_from("<f", payload, 7)[0]
             db = (payload[11] - 0x78) / 10.0
+            q = payload[12] / 10.0
             return (
                 f"CH{ch} EQ band {band} ({freq:g} Hz) gain {db:+.1f} dB "
-                f"Q=0x{payload[12]:02x} (CMD 0x0a sub 0x{payload[6]:02x})"
+                f"Q {q:.1f} (CMD 0x0a sub 0x{payload[6]:02x})"
             )
         return None
 
