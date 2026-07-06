@@ -96,6 +96,8 @@ MUTE_SUB_BYTE_CHANNEL = 0x01  # CMD 0x05 byte[6] for per-channel mute
 PHASE_SUB_BYTE = 0x02         # CMD 0x05 byte[6] for per-channel phase invert
 EQ_PASS_SUB_BYTE = 0x07       # CMD 0x05 byte[6] for per-channel EQ pass/bypass
 SPEAKER_TYPE_SUB_BYTE = 0x30  # CMD 0x05 byte[6] for per-channel speaker type (byte[7]=1..6)
+SOURCE_LOW_SUB_BYTE = 0x26    # CMD 0x05 byte[6] @ 0x00b7 low source (0=HL 1=LL 2=opt 3=USB-au)
+SOURCE_HIGH_SUB_BYTE = 0x0E   # CMD 0x05 byte[6] @ 0x00b7 high source (0=BT 1=USB-disk)
 BRIDGE_SUB_BYTE = 0x28        # CMD 0x1c byte[6] for CH7+CH8 bridge (state in byte[19])
 EQ_BAND_SUB_MIN = 0x08        # CMD 0x0a byte[6] EQ band slot base (band 1)
 EQ_BAND_SUB_MAX = 0x26        # ... band 31 (sub = 0x08 + band-1)
@@ -402,6 +404,24 @@ class UhidShim:
             and 1 <= payload[7] <= 10
         ):
             return f"CH{payload[7]} EQ RESET (CMD 0x05 sub 0x07 @ master addr)"
+        if (
+            len(payload) >= 8
+            and payload[2] == 0x05
+            and payload[4:6] == MASTER_VOLUME_ADDR
+            and payload[6] == SOURCE_LOW_SUB_BYTE
+            and 0 <= payload[7] <= 3
+        ):
+            names = {0: "high level", 1: "low level", 2: "opt", 3: "USB audio"}
+            return f"LOW SOURCE {names[payload[7]]} (CMD 0x05 sub 0x26)"
+        if (
+            len(payload) >= 8
+            and payload[2] == 0x05
+            and payload[4:6] == MASTER_VOLUME_ADDR
+            and payload[6] == SOURCE_HIGH_SUB_BYTE
+            and 0 <= payload[7] <= 1
+        ):
+            names = {0: "BT", 1: "USB disk"}
+            return f"HIGH SOURCE {names[payload[7]]} (CMD 0x05 sub 0x0e)"
         if (
             len(payload) >= 8
             and payload[2] == 0x05

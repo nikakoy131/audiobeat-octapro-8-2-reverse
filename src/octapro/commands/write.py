@@ -161,6 +161,64 @@ def run_write_mute(
     return 0
 
 
+def run_write_source(
+    tier: str,          # "high" or "low"
+    source: str,
+    commit: bool,
+    no_keepalive: bool = False,
+) -> int:
+    """Input source select (CMD 0x05 global addr 0x00b7).
+
+    Two independent registers, live-verified 2026-07-06:
+      tier=low  (selector 0x26): high-level/low-level/opt/usb-audio
+      tier=high (selector 0x0e): bt/usb-disk
+    """
+    from octapro.logging import log_packet_in, log_packet_out
+    from octapro.protocol.constants import (
+        CMD_READ_BLOCK,
+        SESSION_OPEN_ADDR,
+        SOURCE_HIGH_NAMES,
+        SOURCE_LOW_NAMES,
+        source_high_code,
+        source_low_code,
+    )
+    from octapro.protocol.packet import build_source_high, build_source_low
+
+    try:
+        if tier == "low":
+            code = source_low_code(source)
+            pkt = build_source_low(code)
+            label = SOURCE_LOW_NAMES[code]
+        else:
+            code = source_high_code(source)
+            pkt = build_source_high(code)
+            label = SOURCE_HIGH_NAMES[code]
+    except ValueError as exc:
+        log.error("%s", exc)
+        return 1
+
+    intent = f"{tier.upper()} SOURCE → {label}"
+
+    if not commit:
+        _dry_run_print(intent, bytes(pkt))
+        return 0
+
+    from octapro.transport.hid import HidTransport
+
+    try:
+        with HidTransport() as t:
+            if not no_keepalive:
+                t.start_keepalive()
+            log_packet_out(CMD_READ_BLOCK, SESSION_OPEN_ADDR, pkt[6], bytes(pkt))
+            resp = t.transact(bytes(pkt))
+            log_packet_in(resp)
+            log.info("Written: %s", intent)
+    except Exception as exc:
+        log.error("Write failed: %s", exc)
+        return 1
+    return 0
+
+
 def run_write_speaker_type(
     channel: int,
     speaker_type: str,

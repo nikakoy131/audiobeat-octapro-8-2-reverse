@@ -91,16 +91,26 @@ This maps to addr=0x07b7 (CH7) and addr=0x09b7 (CH8) in protocol.
  
 ---
  
-## Input Sources
- 
-| Source | Priority |
-|--------|----------|
-| Bluetooth (APTX-HD) | High (auto-switch) |
-| USB drive (U disk) | High (auto-switch) |
-| Optical (TOSLINK) | Normal |
-| High-level (speaker) | Normal |
-| Low-level (RCA) | Normal |
-| USB audio (PC/Mac) | Normal |
+## Input Sources — SELECT SOLVED 2026-07-06
+
+The app has **two dropdowns**, one per priority tier (not one selector). Both
+write via CMD 0x05 @ global addr `0x00b7`; see PROTOCOL.md "Input source select".
+
+**High source** (high-priority auto-switch) — selector `0x0e`:
+
+| Source | code |
+|--------|------|
+| Bluetooth (APTX-HD) | `0x00` |
+| USB drive (U disk) | `0x01` |
+
+**Low source** (normal priority) — selector `0x26`, byte[7] = keepalive read ID:
+
+| Source | code |
+|--------|------|
+| High-level (speaker) | `0x00` |
+| Low-level (RCA) | `0x01` |
+| Optical (TOSLINK / opt) | `0x02` |
+| USB audio (PC/Mac) | `0x03` |
  
 ---
  
@@ -163,7 +173,7 @@ Channel volume range: 0 to -60 dB → bytes 0x78 to 0x14.
 | **Preset save** (M1 save button) | Find write sequence | 6 slots total |
 | **Preset load** (select M2) | Find read/apply sequence | |
 | ~~**Bridge** CH7+CH8 toggle~~ | ~~Find bridge command~~ | **DONE 2026-07-06** — CMD 0x1c sub 0x28, byte[19] bit 0x80; see PROTOCOL.md "Bridge CH7+CH8" |
-| **Input source** switch | Find source select command | |
+| ~~**Input source** switch~~ | ~~Find source select command~~ | **DONE 2026-07-06** — CMD 0x05 @ 0x00b7, two registers: low=selector 0x26, high=selector 0x0e; see PROTOCOL.md "Input source select" |
 | ~~**Main volume** change~~ | ~~Find master vol command~~ | **DONE 2026-07-05** — CMD 0x08 sub 0x0c, see PROTOCOL.md "Master volume write" |
 | ~~**EQ Pass** toggle~~ | ~~Find EQ bypass command~~ | **DONE 2026-07-06** — CMD 0x05 selector 0x07 (channel-flag). EQ RST partial |
 | **Noise gate** threshold | Find noise gate cmd | Factory set, low priority |

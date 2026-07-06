@@ -106,7 +106,11 @@ is mandatory after connect — otherwise READ_BLOCK returns a short `ee 55` refu
   **Speaker type** shares CMD 0x05 but with its own selector byte[6]=`0x30`
   and a 1..6 enum in byte[7] (HF..FF, menu order): `write speaker-type`,
   `build_speaker_type(ch, code)`, `constants.speaker_type_code`. See
-  PROTOCOL.md "Speaker type".
+  PROTOCOL.md "Speaker type". **Input source select** is CMD 0x05 at the
+  global addr `0x00b7` with two registers: `write source-low` (selector
+  `0x26`, byte[7]=keepalive source ID 0..3) and `write source-high` (selector
+  `0x0e`, byte[7]=0 BT / 1 USB-disk). Builders `build_source_low/high`. See
+  PROTOCOL.md "Input source select".
 - `0x0a` WRITE_DSP — real-time DSP write; sub `0x05`=HPF freq; **EQ band
   = sub `0x08 + (band-1)`** (band 1..31 → sub `0x08`..`0x26`), one atomic
   packet carries freq[7:11]+gain[11]+Q[12] (Q byte = round(Q×10)), no trailer,
@@ -171,7 +175,6 @@ Most DSP params are now solved (2026-07-06 via the uhid shim): master vol,
 faders, delay, mute, phase, bridge, 31-band EQ (gain/freq/Q), EQ pass/reset,
 HPF+LPF (freq/slope/type). High-priority remaining:
 - Routing matrix write commands
-- Input source switching (read-side IDs known)
 - Preset save/recall (M1–M6)
 - EQ "reset all" variant (only per-channel reset captured)
 

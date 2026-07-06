@@ -32,6 +32,8 @@ from octapro.protocol.constants import (
     SUB_MUTE_MASTER,
     SUB_PHASE,
     SUB_SESSION_OPEN,
+    SUB_SOURCE_HIGH,
+    SUB_SOURCE_LOW,
     SUB_SPEAKER_TYPE,
     WRITE_DSP_TRAILER,
     slope_db_to_byte,
@@ -369,6 +371,42 @@ def build_speaker_type(ch: int, code: int) -> bytearray:
     pkt[7] = code
     pkt[8] = compute_checksum(pkt)
     return pkt
+
+
+def _build_source_select(selector: int, code: int) -> bytearray:
+    """CMD 0x05 global source-select (byte[6]=selector, byte[7]=code)."""
+    pkt = _base_packet(CMD_READ_BLOCK, SESSION_OPEN_ADDR, 0)
+    pkt[6] = selector
+    pkt[7] = code
+    pkt[8] = compute_checksum(pkt)
+    return pkt
+
+
+def build_source_low(code: int) -> bytearray:
+    """CMD 0x05 LOW (normal-priority) source select — selector 0x26.
+
+    Live-captured 2026-07-06 (global addr 0x00b7). byte[7] is the SOURCE_NAMES
+    enum (0=high level, 1=low level, 2=opt, 3=USB audio), matching the keepalive
+    read ID. Verified byte-perfect:
+        high level: e0 a2 05 00 b7 00 26 00 bd
+        low level:  e0 a2 05 00 b7 00 26 01 be
+    """
+    if not 0 <= code <= 3:
+        raise ValueError(f"low-source code must be 0..3, got {code}")
+    return _build_source_select(SUB_SOURCE_LOW, code)
+
+
+def build_source_high(code: int) -> bytearray:
+    """CMD 0x05 HIGH (auto-switch) source select — selector 0x0e.
+
+    Live-captured 2026-07-06 (global addr 0x00b7). byte[7]: 0=BT, 1=USB disk.
+    Verified byte-perfect:
+        BT:       e0 a2 05 00 b7 00 0e 00 a5
+        USB disk: e0 a2 05 00 b7 00 0e 01 a6
+    """
+    if not 0 <= code <= 1:
+        raise ValueError(f"high-source code must be 0 (BT) or 1 (USB disk), got {code}")
+    return _build_source_select(SUB_SOURCE_HIGH, code)
 
 
 def build_bridge(bridged: bool) -> bytearray:
