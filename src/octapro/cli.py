@@ -392,7 +392,7 @@ def write_solo(
 @write_app.command(name="routing")
 def write_routing(
     output: Annotated[
-        int, typer.Option("--output", "-o", min=1, max=10, help="Output channel 1-10 (not 7/8).")
+        int, typer.Option("--output", "-o", min=1, max=10, help="Output channel 1-10.")
     ],
     levels: Annotated[
         str,
@@ -413,7 +413,7 @@ def write_routing(
     """Set an output channel's full 14-input routing row (CMD 0x20).
 
     The whole row is rewritten atomically, so ALL 14 input levels must be given.
-    CH7/CH8 (bridged sub pair) are not supported. **Dry-run unless `--commit`.**
+    Works for all outputs 1-10. **Dry-run unless `--commit`.**
     """
     _setup(verbose, quiet, log_file)
     try:

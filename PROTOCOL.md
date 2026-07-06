@@ -675,9 +675,17 @@ CH1:  8b 96 a1 ac b7 c2|00 00|e4 80 80 80 80 80 00 00|8a 94 9e a8 b2 bc|64 00|c6
       IN1 2  3  4  5  6         (segB one-hot @ m)     BTl r  Ul r  Ol r        USl r
 ```
 
-Verified byte-perfect on outputs **1–6, 9, 10**. **CH7/CH8 (the bridged sub
-pair) use a DIFFERENT layout** (values collapse to `0xb2`/`0x32`, the two rows
-mirror each other) and are **not modelled** — the builder rejects them.
+Verified byte-perfect on **all outputs 1–10**. Standard outputs (1–6, 9, 10) use
+the segB one-hot + `0x64` template above. **CH7/CH8 (the sub pair) use a
+DISTINCT fixed template** — same crosspoint positions and `0x80+pct` encoding,
+but `segB [15:23] = b2 b2 80 80 80 80 00 00` (no one-hot `0xe4`) and both bytes
+of each L/R flag pair (`[29,30]`, `[33,34]`) are `0x32` instead of one-hot
+`0x64`. This is independent of bridge state (verified un-bridged); CH7 and CH8
+are independent outputs that merely share this template. Example (CH7, IN-1=30%,
+BT-L=70%, USB-R=80%, others 50%/0%):
+```
+e0 a2 20 00 b7 07 00 9e b2 80 80 80 80 00 00 b2 b2 80 80 80 80 00 00 c6 b2 b2 b2 b2 b2 32 32 b2 d0 32 32 dc
+```
 
 Because CMD 0x20 rewrites the whole row atomically and **cannot be read back**,
 a single-crosspoint edit is not possible; you must specify all 14 levels.
