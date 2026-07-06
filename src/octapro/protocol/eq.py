@@ -9,6 +9,21 @@ from octapro.protocol.gain import byte_to_db
 
 WarnFn = Callable[[str, object, str], None]
 
+_Q_SCALE = 10.0
+
+
+def q_to_byte(q: float) -> int:
+    """Encode a Q factor to its byte. q_byte = round(Q * 10); default 0x0a = Q 1.0.
+
+    Live-verified 2026-07-06 (Q 2.9 -> 0x1d). Clamps to [0, 255].
+    """
+    return max(0, min(0xFF, round(q * _Q_SCALE)))
+
+
+def byte_to_q(b: int) -> float:
+    """Decode a Q byte to its factor (Q = byte / 10)."""
+    return b / _Q_SCALE
+
 
 @dataclass
 class EqBand:
@@ -17,6 +32,11 @@ class EqBand:
     gain_db: float | None
     gain_byte: int
     q_byte: int
+
+    @property
+    def q(self) -> float:
+        """Q factor (q_byte / 10; live-verified 2026-07-06)."""
+        return byte_to_q(self.q_byte)
 
 
 def parse_eq_block(

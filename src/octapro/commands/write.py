@@ -153,20 +153,22 @@ def run_write_mute(
     return 0
 
 
-def run_write_eq_gain(
+def run_write_eq(
     channel: int,
     band: int,
     db: float,
+    q: float,
+    freq: float | None,
     commit: bool,
     no_keepalive: bool = False,
 ) -> int:
     from octapro.logging import log_packet_in, log_packet_out
     from octapro.protocol.constants import CMD_WRITE_DSP, EQ_BAND_CENTERS_HZ
-    from octapro.protocol.packet import build_eq_gain, channel_addr
+    from octapro.protocol.packet import build_eq_band, channel_addr
 
-    pkt = build_eq_gain(channel, band, db)
-    freq = EQ_BAND_CENTERS_HZ[band - 1]
-    intent = f"CH{channel} EQ band {band} ({freq:g} Hz) gain → {db:+.1f} dB"
+    pkt = build_eq_band(channel, band, gain_db=db, freq_hz=freq, q=q)
+    eff_freq = freq if freq is not None else EQ_BAND_CENTERS_HZ[band - 1]
+    intent = f"CH{channel} EQ band {band} → {eff_freq:g} Hz, {db:+.1f} dB, Q {q:.1f}"
 
     if not commit:
         _dry_run_print(intent, bytes(pkt))
