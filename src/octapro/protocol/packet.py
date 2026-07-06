@@ -15,7 +15,6 @@ from octapro.protocol.constants import (
     CMD_WRITE_DSP,
     CMD_WRITE_MASTER_VOLUME,
     EQ_BAND_CENTERS_HZ,
-    EQ_DEFAULT_Q_BYTE,
     KNOWN_STATUSES,
     MUTE_OFF,
     MUTE_ON,
@@ -167,30 +166,31 @@ def build_channel_gain(ch: int, db: float) -> bytearray:
     return _build_volume_write(channel_addr(ch), SUB_CHANNEL_GAIN, db)
 
 
-def build_eq_gain(
+def build_eq_band(
     ch: int,
     band: int,
-    gain_db: float,
+    gain_db: float = 0.0,
     freq_hz: float | None = None,
-    q_byte: int = EQ_DEFAULT_Q_BYTE,
+    q: float = 1.0,
 ) -> bytearray:
-    """CMD 0x0a WRITE_DSP — set an EQ band's gain (and, in the same packet,
-    its center frequency and Q).
+    """CMD 0x0a WRITE_DSP — set an EQ band's gain, center frequency, and Q.
 
-    Live-captured 2026-07-06 on ch1, two bands:
-        band 18 (1 kHz) +6.0 dB: e0 a2 0a 00 b7 01 19 00 00 7a 44 b4 0a 2d
-        band  8 (100 Hz) -5.0 dB: e0 a2 0a 00 b7 01 0f 00 00 c8 42 46 0a 01
-    The sub-byte at [6] selects the band slot (`eq_band_sub`: band 1..31 ->
-    sub 0x08..0x26); float32 center freq at [7:11]; gain byte at [11]
-    (db_to_byte); Q byte at [12]. No [14:16] trailer, no commit.
+    The device writes a whole band in one packet, so all three parameters
+    are set together (unspecified ones fall back to the defaults here — a
+    gain-only change against the live device should re-send the band's
+    current freq/Q, read from the channel block).
 
-    `freq_hz` defaults to the band's standard 1/3-octave center
-    (EQ_BAND_CENTERS_HZ); pass a value to also move the band's center — the
-    band is picked by the sub-byte, so the frequency is a settable parameter.
-    Gain is verified on two bands; freq-move and Q-change are not yet
-    live-captured (the wire slots are known, the device response is not).
+    Live-captured 2026-07-06 on ch1/ch3:
+        band 18 (1 kHz) +6.0 dB:      e0 a2 0a 00 b7 01 19 00 00 7a 44 b4 0a 2d
+        band  8 (100 Hz) -5.0 dB:     e0 a2 0a 00 b7 01 0f 00 00 c8 42 46 0a 01
+        band 15 -> 520 Hz, Q 2.9:     e0 a2 0a 00 b7 03 16 ec ff 01 44 78 1d 75
+    Sub-byte at [6] = band slot (`eq_band_sub`: band 1..31 -> sub 0x08..0x26);
+    float32 center freq at [7:11]; gain byte at [11] (db_to_byte); Q byte at
+    [12] (q_to_byte, round(Q*10)). No [14:16] trailer, no commit. `freq_hz`
+    defaults to the standard 1/3-octave center. All three params verified.
     """
     from octapro.protocol.constants import eq_band_sub
+    from octapro.protocol.eq import q_to_byte
     from octapro.protocol.gain import db_to_byte
 
     sub_byte = eq_band_sub(band)  # validates band is 1..31
@@ -201,7 +201,7 @@ def build_eq_gain(
         sub_byte=sub_byte,
         float_val=float(freq_hz),
         param_byte=db_to_byte(gain_db),
-        type_byte=q_byte,
+        type_byte=q_to_byte(q),
         trailer=b"\x00\x00",
     )
 

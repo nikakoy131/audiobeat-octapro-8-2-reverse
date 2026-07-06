@@ -328,13 +328,18 @@ def write_mute(
     sys.exit(run_write_mute(channel=channel, mute=on, commit=commit, no_keepalive=no_keepalive))
 
 
-@write_app.command(name="eq-gain")
-def write_eq_gain(
+@write_app.command(name="eq")
+def write_eq(
     channel: Annotated[int, typer.Option("--channel", "-c", min=1, max=10, help="Channel 1-10.")],
     band: Annotated[
         int, typer.Option("--band", "-b", min=1, max=31, help="EQ band 1-31 (1=20 Hz … 31=20 kHz).")
     ],
-    db: Annotated[float, typer.Option("--db", help="Band gain in dB.")],
+    db: Annotated[float, typer.Option("--db", help="Band gain in dB.")] = 0.0,
+    q: Annotated[float, typer.Option("--q", help="Q factor (default 1.0).")] = 1.0,
+    freq: Annotated[
+        float | None,
+        typer.Option("--freq", help="Center frequency in Hz (default = band's standard center)."),
+    ] = None,
     commit: Annotated[
         bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
     ] = False,
@@ -343,12 +348,18 @@ def write_eq_gain(
     quiet: _Quiet = False,
     log_file: _LogFile = None,
 ) -> None:
-    """Set a 31-band EQ band's gain (CMD 0x0a). **Dry-run unless `--commit`.**"""
+    """Set a 31-band EQ band's gain, freq, and Q (CMD 0x0a — one atomic write).
+
+    **All three are written together**; unspecified options use defaults, so
+    to change one against a live device, pass the band's current values for
+    the others. **Dry-run unless `--commit`.**
+    """
     _setup(verbose, quiet, log_file)
-    from octapro.commands.write import run_write_eq_gain
+    from octapro.commands.write import run_write_eq
     sys.exit(
-        run_write_eq_gain(
-            channel=channel, band=band, db=db, commit=commit, no_keepalive=no_keepalive
+        run_write_eq(
+            channel=channel, band=band, db=db, q=q, freq=freq,
+            commit=commit, no_keepalive=no_keepalive,
         )
     )
 

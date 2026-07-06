@@ -792,39 +792,40 @@ research but must not be committed against a live device.
 
 ---
 
-### EQ band gain — SOLVED 2026-07-06 (CMD 0x0a, sub-byte = band slot)
+### EQ band (gain + freq + Q) — SOLVED 2026-07-06 (CMD 0x0a, sub = band slot)
 
-The 31-band parametric EQ is written with `WRITE_DSP` (CMD `0x0a`). One
-packet carries a whole band — its **center frequency, gain, and Q** — and
+The 31-band parametric EQ is written with `WRITE_DSP` (CMD `0x0a`). **One
+packet sets a whole band atomically — center frequency, gain, and Q** — and
 the **sub-byte at [6] selects which band**: `sub = 0x08 + (band-1)`, so band
-1..31 → sub `0x08`..`0x26`. Live-captured on ch1, two bands:
+1..31 → sub `0x08`..`0x26`. Live-captured:
 
 ```
-band 18 (1 kHz) +6.0 dB: e0 a2 0a 00 b7 01 19 00 00 7a 44 b4 0a 2d
-band  8 (100 Hz) −5.0 dB: e0 a2 0a 00 b7 01 0f 00 00 c8 42 46 0a 01
+ch1 band 18 (1 kHz) +6.0 dB:    e0 a2 0a 00 b7 01 19 00 00 7a 44 b4 0a 2d
+ch1 band  8 (100 Hz) −5.0 dB:   e0 a2 0a 00 b7 01 0f 00 00 c8 42 46 0a 01
+ch3 band 15 → 520 Hz, Q 2.9:    e0 a2 0a 00 b7 03 16 ec ff 01 44 78 1d 75
 ```
 
 | Field | Bytes | Meaning |
 |-------|-------|---------|
 | CMD | `0a` | WRITE_DSP |
 | ADDR | `b7 NN` | `channel_addr(ch)` |
-| sub | `08+band-1` | band slot (`0x19`=band 18, `0x0f`=band 8) |
-| freq | [7:11] | float32 center Hz — **settable** per band |
+| sub | `08+band-1` | band slot (`0x19`=band 18, `0x0f`=band 8, `0x16`=band 15) |
+| freq | [7:11] | float32 center Hz — settable (500 → 520 verified) |
 | gain | [11] | `db_to_byte(dB)` = `round(dB×10)+0x78` |
-| Q | [12] | Q byte (`0x0a` = default) |
+| Q | [12] | `q_to_byte(Q)` = `round(Q×10)` (`0x0a`=Q 1.0 default, `0x1d`=Q 2.9) |
 | csum | [13] | `(sum(pkt[4:13]) - 0x20) & 0xFF` |
 
 No `[14:16]` trailer (HPF's `00 10`), **no commit** — applies immediately.
-The band is picked by the sub-byte, so the frequency float is a settable
-parameter (move a band's center). **Gain verified on two bands; freq-move
-and Q-change share the packet but their device effect is not yet captured.**
+All three parameters live-verified (gain on 2 bands, freq 500→520, Q 1.0→2.9).
 
-This also explains the old `sub 0x26` "GAIN" from pcaps — that was EQ **band
-31** (20 kHz), not a channel gain.
+Because the write is atomic, changing one parameter against the live device
+means re-sending the band's current freq/gain/Q (read them from the channel
+block, `parse_eq_block`). This also explains the old `sub 0x26` "GAIN" from
+pcaps — that was EQ **band 31** (20 kHz), not a channel gain.
 
-CLI: `write eq-gain --channel N --band B --db F`. Builder:
-`packet.build_eq_gain(ch, band, gain_db, freq_hz=None, q_byte=0x0a)`;
-band→sub via `constants.eq_band_sub(band)`.
+CLI: `write eq --channel N --band B [--db F] [--freq Hz] [--q Q]`. Builder:
+`packet.build_eq_band(ch, band, gain_db=0, freq_hz=None, q=1.0)`; band→sub via
+`constants.eq_band_sub(band)`; Q via `eq.q_to_byte` / `eq.byte_to_q`.
 
 ---
 
