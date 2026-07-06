@@ -637,6 +637,12 @@ zero-fills the tail; the device ignores it.
 CLI: `write mute --channel <n> --on|--off --commit` (master by default).
 Builder: `packet.build_mute(ch, mute)`.
 
+**Solo is not a distinct command.** Toggling a channel's Solo in the app
+(tested on CH4, 2026-07-06) emits bytes **byte-identical to a per-channel
+mute** of that channel (selector `0x01`) — and nothing on the other
+channels. Solo is handled app-side; there is no separate protocol command to
+add, and `write mute` already covers the wire traffic.
+
 ### Phase invert — SOLVED 2026-07-06 (CMD 0x05 selector 0x02)
 
 A member of the channel-flag family above. Live-captured by toggling
@@ -680,12 +686,30 @@ The rest of the payload is treated as a fixed template (it never varied
 across captures). If a future capture shows it encoding other live state,
 revisit `BRIDGE_PAYLOAD_TEMPLATE`.
 
-### Master volume write — SOLVED 2026-07-05 (CMD 0x08, not WRITE_DSP)
+### Volume writes (master + channel faders) — SOLVED (CMD 0x08, not WRITE_DSP)
 
-**CH0 `WRITE_DSP` (CMD `0x0a` sub `0x26`) is still DANGEROUS — do not send
-it.** It does not write volume; it force-switches the input source to high
-level (see below). The real master-volume write is a different, previously
-uncataloged command: **CMD `0x08` sub `0x0c`**.
+**CMD `0x08` is the volume-write command** — the app uses it for *both* the
+Main fader and the per-channel output faders. The sub-byte at [6] + the
+address select the target:
+
+| Control | addr | sub [6] | verified |
+|---------|------|---------|----------|
+| Master (Main) volume | `0x00b7` | `0x0c` | 17 samples + blind −20.0 dB check |
+| Channel N fader/gain | `0xNNb7` | `0x03` | CH3 → −6.00 dB (2026-07-06) |
+
+Both are float32 dB at [7:11] with the checksum at [11]; no commit follows.
+
+> ⚠️ Neither uses `WRITE_DSP` (CMD `0x0a`). The old `write gain` built a
+> `0x0a` sub `0x26` packet (inferred from pcaps, byte-encoded gain) that
+> **never matched app fader traffic** — `write gain` now emits CMD `0x08`
+> sub `0x03`. And **CH0 `WRITE_DSP` is still DANGEROUS**: it force-switches
+> the input source, it is not a volume write (see the retraction below).
+
+**Channel fader** (live CH3 → −6.0 dB): `e0 a2 08 00 b7 03 03 00 00 c0 c0 1d`
+— `0000c0c0` = −6.00 dB, checksum `1d` = `(sum(pkt[4:11]) - 0x20) & 0xFF`.
+Builder `packet.build_channel_gain(ch, db)`; CLI `write gain --channel N --db F`.
+
+**Master volume** — the previously-uncataloged **CMD `0x08` sub `0x0c`**:
 
 **How it was found.** Probing the live device to guess this write was ruled
 out after the 2026-07-04 misattribution below — instead we built a Linux
