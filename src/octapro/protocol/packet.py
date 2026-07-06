@@ -32,6 +32,7 @@ from octapro.protocol.constants import (
     SUB_MUTE_MASTER,
     SUB_PHASE,
     SUB_SESSION_OPEN,
+    SUB_SPEAKER_TYPE,
     WRITE_DSP_TRAILER,
     slope_db_to_byte,
 )
@@ -342,6 +343,30 @@ def build_eq_reset(ch: int) -> bytearray:
     pkt = _base_packet(CMD_READ_BLOCK, channel_addr(0), 0)
     pkt[6] = SUB_EQ_PASS
     pkt[7] = ch
+    pkt[8] = compute_checksum(pkt)
+    return pkt
+
+
+def build_speaker_type(ch: int, code: int) -> bytearray:
+    """CMD 0x05 speaker type for a channel (selector 0x30, byte[7]=1..6 enum).
+
+    Live-captured 2026-07-06 by cycling channel 3's speaker type in the app:
+        HF: e0 a2 05 00 b7 03 30 01 cb
+        LF: e0 a2 05 00 b7 03 30 03 cd
+        FF: e0 a2 05 00 b7 03 30 06 d0
+    Same opcode/shape as the channel-flag family, but byte[6]=0x30 and byte[7]
+    is a 1..6 enum (HF/MF/LF/MHF/MLF/FF in menu order), not a bool. The app
+    also emits a fixed trailer (a0 41 78 26 1f) that the checksum ignores; it
+    is stale buffer data, so we send a clean zero trailer. Verified byte-perfect
+    on CH3 for HF/LF/FF.
+    """
+    if not 1 <= ch <= 10:
+        raise ValueError(f"channel must be 1..10, got {ch}")
+    if not 1 <= code <= 6:
+        raise ValueError(f"speaker-type code must be 1..6, got {code}")
+    pkt = _base_packet(CMD_READ_BLOCK, channel_addr(ch), 0)
+    pkt[6] = SUB_SPEAKER_TYPE
+    pkt[7] = code
     pkt[8] = compute_checksum(pkt)
     return pkt
 

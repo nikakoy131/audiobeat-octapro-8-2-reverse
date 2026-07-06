@@ -104,16 +104,19 @@ This maps to addr=0x07b7 (CH7) and addr=0x09b7 (CH8) in protocol.
  
 ---
  
-## Channel Speaker Types (manual enum)
+## Channel Speaker Types (manual enum) — SOLVED 2026-07-06
  
-| Code | Meaning |
-|------|---------|
-| HF | High frequency (tweeter) |
-| MF | Mid frequency |
-| LF | Low frequency (woofer) |
-| MHF | Medium-high frequency |
-| MLF | Medium-low frequency |
-| FF | Full frequency |
+CMD 0x05, selector byte[6]=`0x30`, code in byte[7] (menu order 1..6). See
+PROTOCOL.md "Speaker type". HF(1)/LF(3)/FF(6) live-verified on CH3.
+ 
+| Wire code | Code | Meaning |
+|-----------|------|---------|
+| `0x01` | HF | High frequency (tweeter) |
+| `0x02` | MF | Mid frequency |
+| `0x03` | LF | Low frequency (woofer) |
+| `0x04` | MHF | Medium-high frequency |
+| `0x05` | MLF | Medium-low frequency |
+| `0x06` | FF | Full frequency |
  
 ---
  
