@@ -190,6 +190,52 @@ class TestBuildChannelGain:
             build_channel_gain(0, -6.0)
 
 
+class TestBuildEqGain:
+    """Live-captured 2026-07-06 on ch1, two bands. The sub-byte encodes the
+    band slot: sub = 0x08 + (band-1)."""
+
+    def test_band18_1khz_plus6_live_bytes(self):
+        from octapro.protocol.packet import build_eq_gain
+
+        # e0 a2 0a 00 b7 01 19 00 00 7a 44 b4 0a 2d, no 0x10 trailer
+        pkt = build_eq_gain(1, 18, 6.0)
+        assert bytes(pkt[:16]) == bytes.fromhex("e0a20a00b7011900007a44b40a2d0000")
+
+    def test_band8_100hz_minus5_live_bytes(self):
+        from octapro.protocol.packet import build_eq_gain
+
+        # e0 a2 0a 00 b7 01 0f 00 00 c8 42 46 0a 01 — sub 0x0f, 100 Hz, -5.0 dB
+        pkt = build_eq_gain(1, 8, -5.0)
+        assert bytes(pkt[:16]) == bytes.fromhex("e0a20a00b7010f0000c842460a010000")
+
+    def test_sub_byte_encodes_band(self):
+        from octapro.protocol.packet import build_eq_gain
+
+        assert build_eq_gain(1, 1, 0.0)[6] == 0x08   # band 1
+        assert build_eq_gain(1, 8, 0.0)[6] == 0x0F   # band 8
+        assert build_eq_gain(1, 18, 0.0)[6] == 0x19  # band 18
+        assert build_eq_gain(1, 31, 0.0)[6] == 0x26  # band 31
+
+    def test_freq_override(self):
+        import struct
+
+        from octapro.protocol.packet import build_eq_gain
+
+        pkt = build_eq_gain(1, 18, 0.0, freq_hz=1050.0)
+        assert pkt[6] == 0x19  # still band 18 (sub-byte, not freq)
+        assert abs(struct.unpack_from("<f", pkt, 7)[0] - 1050.0) < 0.01
+
+    def test_band_out_of_range_rejected(self):
+        import pytest
+
+        from octapro.protocol.packet import build_eq_gain
+
+        with pytest.raises(ValueError):
+            build_eq_gain(1, 0, 0.0)
+        with pytest.raises(ValueError):
+            build_eq_gain(1, 32, 0.0)
+
+
 class TestBuildChannelDelay:
     """Live-captured 2026-07-06: CMD 0x08 sub 0x04 time-alignment delay, from
     dragging CH2's delay to 1.512 ms. float32 milliseconds directly."""

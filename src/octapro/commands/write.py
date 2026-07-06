@@ -153,6 +153,42 @@ def run_write_mute(
     return 0
 
 
+def run_write_eq_gain(
+    channel: int,
+    band: int,
+    db: float,
+    commit: bool,
+    no_keepalive: bool = False,
+) -> int:
+    from octapro.logging import log_packet_in, log_packet_out
+    from octapro.protocol.constants import CMD_WRITE_DSP, EQ_BAND_CENTERS_HZ
+    from octapro.protocol.packet import build_eq_gain, channel_addr
+
+    pkt = build_eq_gain(channel, band, db)
+    freq = EQ_BAND_CENTERS_HZ[band - 1]
+    intent = f"CH{channel} EQ band {band} ({freq:g} Hz) gain → {db:+.1f} dB"
+
+    if not commit:
+        _dry_run_print(intent, bytes(pkt))
+        return 0
+
+    from octapro.transport.hid import HidTransport
+
+    try:
+        with HidTransport() as t:
+            if not no_keepalive:
+                t.start_keepalive()
+            log_packet_out(CMD_WRITE_DSP, channel_addr(channel), pkt[6], bytes(pkt))
+            resp = t.transact(bytes(pkt))
+            log_packet_in(resp)
+            # No separate commit observed for this command — applies immediately.
+            log.info("Written: %s", intent)
+    except Exception as exc:
+        log.error("Write failed: %s", exc)
+        return 1
+    return 0
+
+
 def run_write_delay(
     channel: int,
     ms: float,
