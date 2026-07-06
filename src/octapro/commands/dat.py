@@ -1,9 +1,9 @@
 import logging
 from pathlib import Path
 
-log = logging.getLogger("octapro.dat")
+from octapro.protocol.constants import SLOPE_NAMES as _SLOPE_NAMES
 
-_SLOPE_NAMES = {0x03: "12 dB/oct", 0x05: "36 dB/oct"}
+log = logging.getLogger("octapro.dat")
 
 
 def run_parse_dat(path: Path, channel: int | None = None) -> int:

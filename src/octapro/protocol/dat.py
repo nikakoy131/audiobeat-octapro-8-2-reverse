@@ -19,7 +19,7 @@ MIN_FILE_LEN = len(HEADER_MAGIC) + 10 * BLOCK_LEN  # 2385
 #  [0:32]    routing matrix (32 bytes; signed int8 /10.0, 0x80 = mute)
 #  [32:38]   UNKNOWN (6 bytes) — decode to non-filter floats; meaning TBD
 #  [38:42]   float32 LE HPF freq (Hz)
-#  [42]      HPF slope code (0x05=36 dB/oct, 0x03=12 dB/oct)
+#  [42]      HPF slope code (dB/oct = (code+1)*6; 0x00=6 … 0x05=36 … 0x07=48)
 #  [43]      UNKNOWN byte (observed 0x00)
 #  [44:48]   float32 LE LPF freq (Hz); 20600.0 = bypass
 #  [48]      LPF slope code

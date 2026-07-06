@@ -414,6 +414,24 @@ class UhidShim:
             and payload[2] == 0x0A
             and payload[4] == 0xB7
             and 1 <= payload[5] <= 10
+            and payload[6] in (0x05, 0x06)
+        ):
+            ch = payload[5]
+            kind = "HPF" if payload[6] == 0x05 else "LPF"
+            freq = struct.unpack_from("<f", payload, 7)[0]
+            slope = (payload[11] + 1) * 6
+            ftype = {0: "LR", 1: "Bessel", 2: "Butterworth"}.get(
+                payload[12], f"0x{payload[12]:02x}"
+            )
+            return (
+                f"CH{ch} {kind} {freq:g} Hz, {slope} dB/oct, {ftype} "
+                f"(CMD 0x0a sub 0x{payload[6]:02x})"
+            )
+        if (
+            len(payload) >= 13
+            and payload[2] == 0x0A
+            and payload[4] == 0xB7
+            and 1 <= payload[5] <= 10
             and EQ_BAND_SUB_MIN <= payload[6] <= EQ_BAND_SUB_MAX
         ):
             ch = payload[5]

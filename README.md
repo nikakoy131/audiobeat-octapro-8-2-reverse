@@ -120,10 +120,13 @@ uv run octaproctl monitor
 uv run octaproctl decode-pcap usb2.pcapng
 
 # Write HPF — DRY RUN by default (prints packet, sends nothing)
-uv run octaproctl write hpf --channel 7 --freq 25
+uv run octaproctl write hpf --channel 7 --freq 25 --slope-db 36 --type bessel
 
 # Write HPF — actually apply
 uv run octaproctl write hpf --channel 7 --freq 25 --commit
+
+# Write LPF — same options
+uv run octaproctl write lpf --channel 7 --freq 3000 --slope-db 48 --type butterworth
 
 # Write channel fader/gain (CMD 0x08) — dry run
 uv run octaproctl write gain --channel 3 --db -6.0
@@ -156,7 +159,8 @@ octaproctl monitor [--interval 0.5]                   live poll + diff highlight
 octaproctl parse-dat <file> [--channel N]             offline .dat preset decode
 octaproctl decode-pcap <file> [--out jsonl]           offline pcapng decode (needs tshark)
 octaproctl probe <hex> [--commit]                     send raw packet
-octaproctl write hpf --channel N --freq Hz [--slope C] [--commit]
+octaproctl write hpf --channel N --freq Hz [--slope-db D] [--type T] [--commit]
+octaproctl write lpf --channel N --freq Hz [--slope-db D] [--type T] [--commit]
 octaproctl write gain --channel N --db F [--commit]   channel fader (N=1..10, CMD 0x08)
 octaproctl write delay --channel N --ms F [--commit]  channel time-align delay (CMD 0x08)
 octaproctl write eq --channel N --band B [--db F] [--freq Hz] [--q Q] [--commit]   31-band EQ (CMD 0x0a)
@@ -233,7 +237,8 @@ GitHub Actions (`release.yml`) builds a wheel + sdist and attaches them to the R
 - [x] **Channel Block Readback:** Decode full 242-byte channel block (HPF/LPF, EQ table, routing matrix).
 - [x] **Preset Parsing:** Offline `.dat` preset parser supporting the `US002` format.
 - [x] **Parametric EQ Decoding:** Decode gain and frequencies for all 31 EQ bands.
-- [x] **Real-time Crossover Control:** Set HPF cut-off frequencies and slopes (12/36 dB/octave verified).
+- [x] **Crossover (HPF + LPF):** Frequency, slope (6–48 dB/oct, all 8 verified), and filter type
+  (Linkwitz-Riley / Bessel / Butterworth) — CMD `0x0a` sub `0x05`/`0x06`, live-verified 2026-07-06.
 - [x] **Channel Faders:** Per-channel output level (CMD `0x08` sub `0x03`, float32 dB — live-verified CH3 → −6.0 dB, 2026-07-06).
 - [x] **Time Alignment (Delay):** Per-channel delay (CMD `0x08` sub `0x04`, float32 ms — live-verified CH2 → 1.512 ms, 2026-07-06).
 - [x] **31-band Parametric EQ:** Band gain, center frequency, and Q (CMD `0x0a`, one atomic write, sub-byte = band slot — all three live-verified, 2026-07-06).
@@ -245,14 +250,12 @@ GitHub Actions (`release.yml`) builds a wheel + sdist and attaches them to the R
 - [x] **Phase Inversion (0°/180°):** `write phase` (CMD `0x05` selector `0x02`, 2026-07-06).
 - [x] **CH7+CH8 Bridging:** `write bridge` (CMD `0x1c`, 2026-07-06).
 
+### Crossover & Equalizer — DONE
+- [x] **HPF + LPF** — frequency, slope (all 8 steps 6–48 dB/oct), filter type (LR/Bessel/Butterworth).
+- [x] **31-band EQ** — gain, center frequency, and Q (one atomic write per band).
+- [x] **EQ Pass** (`write eq-pass`) and **EQ Reset/RST** (`write eq-reset`) — CMD `0x05` selector `0x07`.
+
 ### Planned Features & Roadblocks
-- [ ] **Crossover & Equalizer Expansion:**
-  - Write commands for **LPF Cutoff Frequency** and **LPF Slope** (capture sub-addresses near `0x07b7`).
-  - Document remaining slope codes corresponding to 6/18/24/30/42/48 dB/octave slopes.
-  - Discover filter algorithm selection (`Bessel` vs `Butterworth` vs `Linkwitz-Riley`).
-  - **31-band EQ** done — gain, center frequency, and Q (CMD `0x0a`, one atomic write per band).
-  - **EQ Pass** (`write eq-pass`) and **EQ Reset/RST** (`write eq-reset`) done — CMD `0x05`
-    selector `0x07` (pass toggles at `0xNNb7`; reset targets `0x00b7` with channel in byte[7]).
 - [ ] **Channel Tuning & Mixer Routing:**
   - Map and implement **Speaker Type** configurations.
   - Implement writing/applying the **Input Routing Matrix** levels (0–100% mix).
