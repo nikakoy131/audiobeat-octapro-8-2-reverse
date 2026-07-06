@@ -162,7 +162,7 @@ Channel volume range: 0 to -60 dB → bytes 0x78 to 0x14.
 | ~~**Bridge** CH7+CH8 toggle~~ | ~~Find bridge command~~ | **DONE 2026-07-06** — CMD 0x1c sub 0x28, byte[19] bit 0x80; see PROTOCOL.md "Bridge CH7+CH8" |
 | **Input source** switch | Find source select command | |
 | ~~**Main volume** change~~ | ~~Find master vol command~~ | **DONE 2026-07-05** — CMD 0x08 sub 0x0c, see PROTOCOL.md "Master volume write" |
-| **EQ Pass** toggle | Find EQ bypass command | |
+| ~~**EQ Pass** toggle~~ | ~~Find EQ bypass command~~ | **DONE 2026-07-06** — CMD 0x05 selector 0x07 (channel-flag). EQ RST partial |
 | **Noise gate** threshold | Find noise gate cmd | Factory set, low priority |
  
 

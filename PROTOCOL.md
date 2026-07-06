@@ -588,12 +588,21 @@ e0 a2 05 00 b7 NN <selector> <state> <csum>
 |--------------------|---------|----------|
 | `0x01` | per-channel mute | CH2/6/10 on, CH6 off |
 | `0x02` | phase invert (1=180°, 0=0°) | CH6 on/off |
+| `0x07` | EQ pass/bypass (1=bypass) | CH7 on/off |
 | `0x0d` | **master** mute (ch0 only) | on/off |
 
-Builders: `packet.build_channel_flag(ch, selector, on)`, with `build_mute`
-and `build_phase` as named wrappers. Likely more selectors exist (bridge,
-EQ-pass, etc.) — capture them the same way. No commit packet follows any of
-these; they apply immediately.
+Builders: `packet.build_channel_flag(ch, selector, on)`, with `build_mute`,
+`build_phase`, `build_eq_pass` as named wrappers. More selectors likely
+exist — capture them the same way. No commit packet follows any of these;
+they apply immediately.
+
+**EQ RST (reset) — PARTIAL.** The EQ "RST" button sent a single
+`e0 a2 05 00 b7 00 07 07 a5` (CMD 0x05, byte[6]=`0x07`, byte[7]=`0x07`, addr
+`0x00b7`) — no 31-band reset burst followed. It reuses the EQ-pass selector
+but with byte[7]=`0x07` and the master address, so it's likely a "reset EQ"
+opcode. Unclear from one sample whether byte[7]=`0x07` is the target channel
+(reset ch7) or a global reset. Needs a second capture on a different channel
+to disambiguate; not yet implemented.
 
 ### Mute write — SOLVED 2026-07-06 (CMD 0x05; master and channel differ)
 

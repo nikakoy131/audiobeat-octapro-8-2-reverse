@@ -23,6 +23,7 @@ from octapro.protocol.constants import (
     SUB_BRIDGE,
     SUB_CHANNEL_DELAY,
     SUB_CHANNEL_GAIN,
+    SUB_EQ_PASS,
     SUB_MASTER_VOLUME,
     SUB_MUTE_CHANNEL,
     SUB_MUTE_MASTER,
@@ -269,6 +270,17 @@ def build_phase(ch: int, invert: bool) -> bytearray:
     channels follow from the shared channel-flag addressing.
     """
     return build_channel_flag(ch, SUB_PHASE, invert)
+
+
+def build_eq_pass(ch: int, bypass: bool) -> bytearray:
+    """CMD 0x05 EQ pass/bypass for a channel (channel-flag selector 0x07).
+
+    Live-captured 2026-07-06 by toggling channel 7's EQ Pass:
+        bypass on:  e0 a2 05 00 b7 07 07 01 a6
+        bypass off: e0 a2 05 00 b7 07 07 00 a5
+    byte[6]=0x07, byte[7]=1 (bypass) / 0 (EQ engaged).
+    """
+    return build_channel_flag(ch, SUB_EQ_PASS, bypass)
 
 
 def build_bridge(bridged: bool) -> bytearray:
