@@ -382,6 +382,28 @@ def write_delay(
     sys.exit(run_write_delay(channel=channel, ms=ms, commit=commit, no_keepalive=no_keepalive))
 
 
+@write_app.command(name="eq-pass")
+def write_eq_pass(
+    channel: Annotated[int, typer.Option("--channel", "-c", min=1, max=10, help="Channel 1-10.")],
+    bypass: Annotated[
+        bool, typer.Option("--on/--off", help="Bypass the channel EQ (--on) or engage it (--off).")
+    ] = True,
+    commit: Annotated[
+        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
+    ] = False,
+    no_keepalive: _NoKA = False,
+    verbose: _Verbose = False,
+    quiet: _Quiet = False,
+    log_file: _LogFile = None,
+) -> None:
+    """Bypass/engage a channel's EQ (CMD 0x05 selector 0x07). **Dry-run unless `--commit`.**"""
+    _setup(verbose, quiet, log_file)
+    from octapro.commands.write import run_write_eq_pass
+    sys.exit(
+        run_write_eq_pass(channel=channel, bypass=bypass, commit=commit, no_keepalive=no_keepalive)
+    )
+
+
 @write_app.command(name="phase")
 def write_phase(
     channel: Annotated[int, typer.Option("--channel", "-c", min=1, max=10, help="Channel 1-10.")],

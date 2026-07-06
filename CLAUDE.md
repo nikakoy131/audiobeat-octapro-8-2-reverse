@@ -95,9 +95,10 @@ is mandatory after connect — otherwise READ_BLOCK returns a short `ee 55` refu
 - `0x05` (addr=`0xNNb7`, sub=`0x01`) — DSP commit trigger after WRITE_DSP batch
 - `0x05` **channel-flag family** (addr=`0xNNb7`, byte[6]=selector,
   byte[7]=`01`/`00`) — per-channel booleans, live-decoded 2026-07-06 via uhid
-  shim. Selectors: `0x01`=mute, `0x02`=phase invert, `0x0d`=master mute (ch0).
-  CLI: `write mute`, `write phase`. Builder: `build_channel_flag(ch, sel, on)`.
-  See PROTOCOL.md "CMD 0x05 channel-flag family".
+  shim. Selectors: `0x01`=mute, `0x02`=phase invert, `0x07`=EQ pass/bypass,
+  `0x0d`=master mute (ch0). CLI: `write mute`, `write phase`, `write eq-pass`.
+  Builder: `build_channel_flag(ch, sel, on)`. See PROTOCOL.md "CMD 0x05
+  channel-flag family". (EQ RST button is a partial finding — see that section.)
 - `0x0a` WRITE_DSP — real-time DSP write; sub `0x05`=HPF freq; **EQ band
   = sub `0x08 + (band-1)`** (band 1..31 → sub `0x08`..`0x26`), one atomic
   packet carries freq[7:11]+gain[11]+Q[12] (Q byte = round(Q×10)), no trailer,

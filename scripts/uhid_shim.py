@@ -94,6 +94,7 @@ CHANNEL_DELAY_SUB_BYTE = 0x04  # CMD 0x08 byte[6] for per-channel time-align del
 MUTE_SUB_BYTE_MASTER = 0x0D   # CMD 0x05 byte[6] for master mute; byte[7]=1/0
 MUTE_SUB_BYTE_CHANNEL = 0x01  # CMD 0x05 byte[6] for per-channel mute
 PHASE_SUB_BYTE = 0x02         # CMD 0x05 byte[6] for per-channel phase invert
+EQ_PASS_SUB_BYTE = 0x07       # CMD 0x05 byte[6] for per-channel EQ pass/bypass
 BRIDGE_SUB_BYTE = 0x28        # CMD 0x1c byte[6] for CH7+CH8 bridge (state in byte[19])
 EQ_BAND_SUB_MIN = 0x08        # CMD 0x0a byte[6] EQ band slot base (band 1)
 EQ_BAND_SUB_MAX = 0x26        # ... band 31 (sub = 0x08 + band-1)
@@ -381,6 +382,17 @@ class UhidShim:
             ch = payload[5]
             state = "180 (inverted)" if payload[7] else "0 (normal)"
             return f"CH{ch} PHASE {state} (CMD 0x05 sub 0x02)"
+        if (
+            len(payload) >= 8
+            and payload[2] == 0x05
+            and payload[4] == 0xB7
+            and 1 <= payload[5] <= 10
+            and payload[6] == EQ_PASS_SUB_BYTE
+            and payload[7] in (0x00, 0x01)
+        ):
+            ch = payload[5]
+            state = "BYPASS" if payload[7] else "ENGAGED"
+            return f"CH{ch} EQ PASS {state} (CMD 0x05 sub 0x07)"
         if (
             len(payload) >= 32
             and payload[2] == 0x1C
