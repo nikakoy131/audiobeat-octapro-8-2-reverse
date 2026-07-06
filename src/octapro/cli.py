@@ -389,6 +389,35 @@ def write_solo(
     sys.exit(run_write_solo(channel=channel, solo=on, commit=commit, no_keepalive=no_keepalive))
 
 
+@write_app.command(name="speaker-type")
+def write_speaker_type(
+    channel: Annotated[
+        int, typer.Option("--channel", "-c", min=1, max=10, help="Channel 1-10.")
+    ],
+    speaker_type: Annotated[
+        str,
+        typer.Option(
+            "--type", "-t", help="Speaker type: hf, mf, lf, mhf, mlf, or ff (menu order 1-6)."
+        ),
+    ],
+    commit: Annotated[
+        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
+    ] = False,
+    no_keepalive: _NoKA = False,
+    verbose: _Verbose = False,
+    quiet: _Quiet = False,
+    log_file: _LogFile = None,
+) -> None:
+    """Set a channel's speaker type (HF/MF/LF/MHF/MLF/FF). **Dry-run unless `--commit`.**"""
+    _setup(verbose, quiet, log_file)
+    from octapro.commands.write import run_write_speaker_type
+    sys.exit(
+        run_write_speaker_type(
+            channel=channel, speaker_type=speaker_type, commit=commit, no_keepalive=no_keepalive
+        )
+    )
+
+
 @write_app.command(name="eq")
 def write_eq(
     channel: Annotated[int, typer.Option("--channel", "-c", min=1, max=10, help="Channel 1-10.")],

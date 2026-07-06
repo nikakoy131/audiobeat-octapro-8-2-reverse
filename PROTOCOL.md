@@ -616,6 +616,33 @@ action — the app's "reset **all**" dialog option was not captured.
 So selector `0x07` means two things by address: at `0xNNb7` → EQ pass toggle
 (byte[7]=bool); at `0x00b7` → reset channel byte[7]'s EQ.
 
+### Speaker type — SOLVED 2026-07-06 (CMD 0x05 selector 0x30, 1..6 enum)
+
+Per-channel speaker type (HF/MF/LF/MHF/MLF/FF). Same opcode and addressing as
+the channel-flag family, but with its **own selector byte[6]=`0x30`** and a
+**1..6 enum in byte[7]** instead of a 0/1 bool:
+
+```
+e0 a2 05 00 b7 NN 30 <code> <csum>
+```
+
+| code (byte[7]) | type | verified |
+|----------------|------|----------|
+| `0x01` | HF (high freq)      | ✓ CH3 |
+| `0x02` | MF (mid freq)       | interpolated |
+| `0x03` | LF (low freq)       | ✓ CH3 |
+| `0x04` | MHF (mid-high freq) | interpolated |
+| `0x05` | MLF (mid-low freq)  | interpolated |
+| `0x06` | FF (full freq)      | ✓ CH3 |
+
+Codes follow the app's menu order; HF(1)/LF(3)/FF(6) captured byte-perfect on
+CH3, the rest interpolated on that linear sequence. The app appends a fixed
+5-byte trailer `a0 41 78 26 1f` at `[9:14]` that the checksum does **not**
+cover (byte[8] = `(sum(pkt[4:8]) − 0x20)` — equivalently the universal checksum
+with a zero trailer); it is stale app-buffer data the firmware ignores, so the
+builder sends a clean zero trailer. Builder `packet.build_speaker_type(ch,
+code)`; CLI `write speaker-type --channel N --type hf|mf|lf|mhf|mlf|ff`.
+
 ### Solo — SOLVED 2026-07-06 (client-side macro, NOT a device command)
 
 Solo has **no wire command of its own**. Live capture 2026-07-06 (uhid shim)
