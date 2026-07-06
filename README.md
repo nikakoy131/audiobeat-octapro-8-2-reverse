@@ -266,7 +266,7 @@ GitHub Actions (`release.yml`) builds a wheel + sdist and attaches them to the R
 - [ ] **Channel Tuning & Mixer Routing:**
   - Implement writing/applying the **Input Routing Matrix** levels (0–100% mix).
 - [x] **Input Source Switching** (`write source-high` / `write source-low`) — CMD `0x05` @ `0x00b7`, two registers (2026-07-06).
-- [x] **Input Routing Matrix** (`write routing`) — CMD `0x20`, per-output 14-input row, value=`0x80`+% (2026-07-06). CH7/CH8 (bridged) pending.
+- [x] **Input Routing Matrix** (`write routing`) — CMD `0x20`, per-output 14-input row, value=`0x80`+%, all CH1-10 (2026-07-06).
 - [ ] **Preset and Global Configuration:**
   - Reverse-engineer **Noise Gate Threshold** configuration.
   - Implement device **Preset Save & Recall** commands (invoking slots M1–M6 from the CLI).
