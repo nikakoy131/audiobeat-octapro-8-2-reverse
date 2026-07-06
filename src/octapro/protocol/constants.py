@@ -60,6 +60,50 @@ SUB_PHASE: Final = 0x02
 # selector 0x07: byte[7]=1 bypasses the channel EQ, 0 engages it.
 SUB_EQ_PASS: Final = 0x07
 
+# CMD 0x05 speaker type, live-captured 2026-07-06 (channel 3). Same opcode as
+# the channel-flag family but with its own selector byte[6]=0x30 and a 1..6
+# ENUM in byte[7] (not a 0/1 bool). Enum follows the app's menu order:
+#   0x01 HF, 0x02 MF, 0x03 LF, 0x04 MHF, 0x05 MLF, 0x06 FF
+# Verified byte-perfect on CH3 for HF(1), LF(3), FF(6); MF/MHF/MLF interpolated.
+# The app also appends a fixed 5-byte trailer (a0 41 78 26 1f) at [9:14] that
+# is NOT covered by the checksum (byte[8] = (sum(pkt[4:8]) - 0x20)) — it is
+# stale app-buffer data the firmware ignores, so we send a clean zero trailer.
+SUB_SPEAKER_TYPE: Final = 0x30
+SPEAKER_TYPE_HF: Final = 0x01
+SPEAKER_TYPE_MF: Final = 0x02
+SPEAKER_TYPE_LF: Final = 0x03
+SPEAKER_TYPE_MHF: Final = 0x04
+SPEAKER_TYPE_MLF: Final = 0x05
+SPEAKER_TYPE_FF: Final = 0x06
+SPEAKER_TYPE_NAMES: Final[dict[int, str]] = {
+    SPEAKER_TYPE_HF: "HF (high freq)",
+    SPEAKER_TYPE_MF: "MF (mid freq)",
+    SPEAKER_TYPE_LF: "LF (low freq)",
+    SPEAKER_TYPE_MHF: "MHF (mid-high freq)",
+    SPEAKER_TYPE_MLF: "MLF (mid-low freq)",
+    SPEAKER_TYPE_FF: "FF (full freq)",
+}
+_SPEAKER_TYPE_CODES: Final[dict[str, int]] = {
+    "hf": SPEAKER_TYPE_HF,
+    "mf": SPEAKER_TYPE_MF,
+    "lf": SPEAKER_TYPE_LF,
+    "mhf": SPEAKER_TYPE_MHF,
+    "mlf": SPEAKER_TYPE_MLF,
+    "ff": SPEAKER_TYPE_FF,
+}
+
+
+def speaker_type_code(name: str) -> int:
+    """Map a speaker-type name (hf/mf/lf/mhf/mlf/ff) to its byte[7] code."""
+    code = _SPEAKER_TYPE_CODES.get(name.strip().lower())
+    if code is None:
+        raise ValueError(
+            f"unknown speaker type {name!r}; use one of: "
+            f"{', '.join(_SPEAKER_TYPE_CODES)}"
+        )
+    return code
+
+
 # CMD 0x1c bridge (CH7+CH8 — the only bridgeable pair on this device),
 # live-captured 2026-07-06. addr=0x00b7, byte[6]=sub 0x28, then a fixed
 # 23-byte "walking-bit" payload [8:31] with the bridge state in byte[19]

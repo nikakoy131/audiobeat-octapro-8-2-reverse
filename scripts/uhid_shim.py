@@ -95,6 +95,7 @@ MUTE_SUB_BYTE_MASTER = 0x0D   # CMD 0x05 byte[6] for master mute; byte[7]=1/0
 MUTE_SUB_BYTE_CHANNEL = 0x01  # CMD 0x05 byte[6] for per-channel mute
 PHASE_SUB_BYTE = 0x02         # CMD 0x05 byte[6] for per-channel phase invert
 EQ_PASS_SUB_BYTE = 0x07       # CMD 0x05 byte[6] for per-channel EQ pass/bypass
+SPEAKER_TYPE_SUB_BYTE = 0x30  # CMD 0x05 byte[6] for per-channel speaker type (byte[7]=1..6)
 BRIDGE_SUB_BYTE = 0x28        # CMD 0x1c byte[6] for CH7+CH8 bridge (state in byte[19])
 EQ_BAND_SUB_MIN = 0x08        # CMD 0x0a byte[6] EQ band slot base (band 1)
 EQ_BAND_SUB_MAX = 0x26        # ... band 31 (sub = 0x08 + band-1)
@@ -401,6 +402,17 @@ class UhidShim:
             and 1 <= payload[7] <= 10
         ):
             return f"CH{payload[7]} EQ RESET (CMD 0x05 sub 0x07 @ master addr)"
+        if (
+            len(payload) >= 8
+            and payload[2] == 0x05
+            and payload[4] == 0xB7
+            and 1 <= payload[5] <= 10
+            and payload[6] == SPEAKER_TYPE_SUB_BYTE
+            and 1 <= payload[7] <= 6
+        ):
+            ch = payload[5]
+            names = {1: "HF", 2: "MF", 3: "LF", 4: "MHF", 5: "MLF", 6: "FF"}
+            return f"CH{ch} SPEAKER TYPE {names[payload[7]]} (CMD 0x05 sub 0x30)"
         if (
             len(payload) >= 32
             and payload[2] == 0x1C

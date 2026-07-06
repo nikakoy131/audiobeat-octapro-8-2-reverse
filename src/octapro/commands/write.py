@@ -161,6 +161,54 @@ def run_write_mute(
     return 0
 
 
+def run_write_speaker_type(
+    channel: int,
+    speaker_type: str,
+    commit: bool,
+    no_keepalive: bool = False,
+) -> int:
+    """Channel speaker type (CMD 0x05 selector 0x30, byte[7]=1..6 enum).
+
+    Live-verified 2026-07-06 (CH3 HF/LF/FF). speaker_type is one of
+    hf/mf/lf/mhf/mlf/ff.
+    """
+    from octapro.logging import log_packet_in, log_packet_out
+    from octapro.protocol.constants import (
+        CMD_READ_BLOCK,
+        SPEAKER_TYPE_NAMES,
+        speaker_type_code,
+    )
+    from octapro.protocol.packet import build_speaker_type, channel_addr
+
+    try:
+        code = speaker_type_code(speaker_type)
+    except ValueError as exc:
+        log.error("%s", exc)
+        return 1
+
+    pkt = build_speaker_type(channel, code)
+    intent = f"CH{channel} SPEAKER TYPE → {SPEAKER_TYPE_NAMES[code]}"
+
+    if not commit:
+        _dry_run_print(intent, bytes(pkt))
+        return 0
+
+    from octapro.transport.hid import HidTransport
+
+    try:
+        with HidTransport() as t:
+            if not no_keepalive:
+                t.start_keepalive()
+            log_packet_out(CMD_READ_BLOCK, channel_addr(channel), pkt[6], bytes(pkt))
+            resp = t.transact(bytes(pkt))
+            log_packet_in(resp)
+            log.info("Written: %s", intent)
+    except Exception as exc:
+        log.error("Write failed: %s", exc)
+        return 1
+    return 0
+
+
 def solo_packets(channel: int, solo: bool) -> list[tuple[int, bytes]]:
     """The mute packets the vendor app sends for solo of `channel`.
 

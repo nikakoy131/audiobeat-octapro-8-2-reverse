@@ -9,6 +9,7 @@ from octapro.protocol.packet import (
     build_mute,
     build_phase,
     build_read_channel,
+    build_speaker_type,
     build_write_dsp,
     build_write_master_volume,
     channel_addr,
@@ -344,6 +345,37 @@ class TestBuildMute:
         assert struct.unpack_from("<H", pkt, 4)[0] == channel_addr(7)
         assert pkt[6] == 0x01  # per-channel sub-byte, NOT the master's 0x0d
         assert pkt[8] == compute_checksum(_zeroed_csum(pkt))
+
+
+class TestBuildSpeakerType:
+    """Live-captured 2026-07-06 (CH3): CMD 0x05 selector 0x30, byte[7]=1..6 enum.
+    HF/LF/FF verified byte-perfect incl. checksum; MF/MHF/MLF interpolated."""
+
+    def test_hf_live_bytes(self):
+        assert bytes(build_speaker_type(3, 1))[:9] == bytes.fromhex("e0a20500b7033001cb")
+
+    def test_lf_live_bytes(self):
+        assert bytes(build_speaker_type(3, 3))[:9] == bytes.fromhex("e0a20500b7033003cd")
+
+    def test_ff_live_bytes(self):
+        assert bytes(build_speaker_type(3, 6))[:9] == bytes.fromhex("e0a20500b7033006d0")
+
+    def test_selector_and_code_placement(self):
+        pkt = build_speaker_type(5, 4)
+        assert struct.unpack_from("<H", pkt, 4)[0] == channel_addr(5)
+        assert pkt[6] == 0x30  # speaker-type selector
+        assert pkt[7] == 4     # MHF code in byte[7]
+        assert pkt[8] == compute_checksum(_zeroed_csum(pkt))
+
+    def test_trailer_is_zero(self):
+        # the app's stale a0 41 78 26 1f trailer is dropped; we send zeros
+        assert bytes(build_speaker_type(3, 1))[9:16] == bytes(7)
+
+    def test_rejects_out_of_range_code(self):
+        with pytest.raises(ValueError):
+            build_speaker_type(3, 0)
+        with pytest.raises(ValueError):
+            build_speaker_type(3, 7)
 
 
 class TestSoloMacro:

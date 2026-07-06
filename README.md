@@ -169,6 +169,7 @@ octaproctl write eq-reset --channel N [--commit]             flatten a channel's
 octaproctl write master --db F [--commit]             master (Main) volume, CMD 0x08
 octaproctl write mute --channel N --on|--off [--commit]     N=0 = master mute
 octaproctl write solo --channel N --on|--off [--commit]     mutes all other channels (macro)
+octaproctl write speaker-type --channel N --type hf|mf|lf|mhf|mlf|ff [--commit]
 octaproctl write phase --channel N --invert|--normal [--commit]
 octaproctl write bridge --on|--off [--commit]         CH7+CH8 bridge
 ```
@@ -258,8 +259,8 @@ GitHub Actions (`release.yml`) builds a wheel + sdist and attaches them to the R
 - [x] **EQ Pass** (`write eq-pass`) and **EQ Reset/RST** (`write eq-reset`) — CMD `0x05` selector `0x07`.
 
 ### Planned Features & Roadblocks
+- [x] **Speaker Type** (`write speaker-type`) — CMD `0x05` selector `0x30`, 1..6 enum (2026-07-06).
 - [ ] **Channel Tuning & Mixer Routing:**
-  - Map and implement **Speaker Type** configurations.
   - Implement writing/applying the **Input Routing Matrix** levels (0–100% mix).
 - [ ] **Preset and Global Configuration:**
   - Reverse-engineer **Input Source Switching** commands (APTX BT / U-disk / TOSLINK / High-level / RCA).
