@@ -5,6 +5,7 @@ from octapro.commands.write import (
     run_write_delay,
     run_write_eq,
     run_write_eq_pass,
+    run_write_eq_reset,
     run_write_gain,
     run_write_master,
     run_write_mute,
@@ -54,6 +55,11 @@ class TestWriteEqPassDryRun:
     def test_dry_run_no_device_needed(self):
         assert run_write_eq_pass(channel=7, bypass=True, commit=False) == 0
         assert run_write_eq_pass(channel=7, bypass=False, commit=False) == 0
+
+
+class TestWriteEqResetDryRun:
+    def test_dry_run_no_device_needed(self):
+        assert run_write_eq_reset(channel=3, commit=False) == 0
 
 
 class TestWritePhaseDryRun:
