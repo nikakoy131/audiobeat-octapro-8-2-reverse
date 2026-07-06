@@ -616,6 +616,24 @@ action — the app's "reset **all**" dialog option was not captured.
 So selector `0x07` means two things by address: at `0xNNb7` → EQ pass toggle
 (byte[7]=bool); at `0x00b7` → reset channel byte[7]'s EQ.
 
+### Solo — SOLVED 2026-07-06 (client-side macro, NOT a device command)
+
+Solo has **no wire command of its own**. Live capture 2026-07-06 (uhid shim)
+proved the vendor app implements it entirely on the host as *"mute every other
+channel"*, reusing the per-channel mute above:
+
+```
+solo CH3 ON  → build_mute(ch, on)  for ch in 1..10, ch ≠ 3
+solo CH3 OFF → build_mute(ch, off) for ch in 1..10, ch ≠ 3
+```
+
+Captured: pressing solo on CH3 sent nine `sub 0x0101` mutes (CH1,2,4,5,6,7,8,
+9,10); releasing it sent nine `sub 0x0001` unmutes to the same set. The soloed
+channel receives nothing. The app does **not** remember which channels were
+already muted — solo-off blindly unmutes all others. CLI `write solo
+--channel N --on/--off` reproduces the macro; helper `commands.write.
+solo_packets(ch, on)` returns the `[(ch, packet), …]` list.
+
 ### Mute write — SOLVED 2026-07-06 (CMD 0x05; master and channel differ)
 
 Mute toggle, live-captured 2026-07-06 via the uhid shim

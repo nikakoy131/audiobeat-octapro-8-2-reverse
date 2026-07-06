@@ -18,7 +18,7 @@ Sources:
 |-----------|----------------|-------|
 | **GAIN (volume)** | 0 to -60 dB | Per-channel output level |
 | **MUTE** | on/off | Silence individual channel |
-| **SOLO** | on/off | Isolate channel |
+| **SOLO** | on/off | Isolate channel — **no device command; app mutes all other channels** (SOLVED 2026-07-06) |
 | **Phase** | 0° / 180° | Phase invert |
 | **HPF** freq | 20 Hz – 20 kHz | High-pass cutoff |
 | **HPF** slope | 6/12/18/24/30/36/42/48 dB/oct | 8 options |

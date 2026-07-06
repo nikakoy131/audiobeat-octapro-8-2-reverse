@@ -161,6 +161,80 @@ def run_write_mute(
     return 0
 
 
+def solo_packets(channel: int, solo: bool) -> list[tuple[int, bytes]]:
+    """The mute packets the vendor app sends for solo of `channel`.
+
+    Solo is a client-side macro: mute (solo on) / unmute (solo off) every
+    channel EXCEPT the soloed one. Returns [(ch, packet), ...] in channel order.
+    """
+    from octapro.protocol.constants import NUM_CHANNELS
+    from octapro.protocol.packet import build_mute
+
+    return [
+        (ch, bytes(build_mute(ch, solo)))
+        for ch in range(1, NUM_CHANNELS + 1)
+        if ch != channel
+    ]
+
+
+def run_write_solo(
+    channel: int,
+    solo: bool,
+    commit: bool,
+    no_keepalive: bool = False,
+) -> int:
+    """Solo a channel (CH1..10).
+
+    Solo is NOT a device command — live capture (2026-07-06) proved the vendor
+    app implements it purely client-side as "mute every OTHER channel":
+        solo ON  CHn  -> build_mute(other, on=True)  for every ch != n
+        solo OFF CHn  -> build_mute(other, on=False) for every ch != n
+    The app does not remember prior mute state; solo-off blindly unmutes the
+    others. This command reproduces that macro over the existing mute write.
+    """
+    from octapro.logging import log_packet_in, log_packet_out
+    from octapro.protocol.constants import CMD_READ_BLOCK, NUM_CHANNELS
+    from octapro.protocol.packet import channel_addr
+
+    if not 1 <= channel <= NUM_CHANNELS:
+        log.error("solo channel must be 1..%d, got %d", NUM_CHANNELS, channel)
+        return 1
+
+    packets = solo_packets(channel, solo)
+    others = [ch for ch, _ in packets]
+    verb = "MUTE" if solo else "UNMUTE"
+    intent = (
+        f"SOLO CH{channel} {'ON' if solo else 'OFF'} "
+        f"→ {verb} CH{{{','.join(str(c) for c in others)}}}"
+    )
+
+    if not commit:
+        _dry_run_print(intent, bytes(packets[0][1]))
+        from rich.console import Console
+
+        Console().print(
+            f"[dim]…plus {len(packets) - 1} more identical mute packets for the "
+            f"other channels ({verb.lower()}).[/dim]"
+        )
+        return 0
+
+    from octapro.transport.hid import HidTransport
+
+    try:
+        with HidTransport() as t:
+            if not no_keepalive:
+                t.start_keepalive()
+            for ch, pkt in packets:
+                log_packet_out(CMD_READ_BLOCK, channel_addr(ch), pkt[6], bytes(pkt))
+                resp = t.transact(bytes(pkt))
+                log_packet_in(resp)
+            log.info("Written: %s", intent)
+    except Exception as exc:
+        log.error("Write failed: %s", exc)
+        return 1
+    return 0
+
+
 def run_write_eq(
     channel: int,
     band: int,
