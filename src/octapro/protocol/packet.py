@@ -20,6 +20,7 @@ from octapro.protocol.constants import (
     REG_KEEPALIVE,
     SESSION_OPEN_ADDR,
     SUB_BRIDGE,
+    SUB_CHANNEL_GAIN,
     SUB_MASTER_VOLUME,
     SUB_MUTE_CHANNEL,
     SUB_MUTE_MASTER,
@@ -107,16 +108,12 @@ def build_write_dsp(
     return pkt
 
 
-def build_write_master_volume(volume_db: float) -> bytearray:
-    """CMD 0x08 SUB 0x0c — direct master-volume write (CH0).
+def _build_volume_write(addr: int, sub_byte: int, db: float) -> bytearray:
+    """CMD 0x08 volume write — float32 dB at [7:11], checksum at [11].
 
-    Live-captured 2026-07-05 via a Linux uhid shim impersonating the real
-    device and replaying the vendor Windows app's own Main-fader drag
-    traffic (see docs/LINUX_UHID_SHIM_PLAN.md). Byte-perfect across 17
-    samples spanning -35.9..-0.98 dB, each independently checksum-verified;
-    a final live check (drag to "-20.0 dB" on the app's UI) decoded to
-    -20.02 dB. Unlike WRITE_DSP (CMD 0x0a), no separate commit packet was
-    observed after any of these writes — this applies immediately.
+    The one command the vendor app uses for both the Main fader and the
+    per-channel output faders (docs/LINUX_UHID_SHIM_PLAN.md). addr + sub_byte
+    select the target; no commit packet follows (applies immediately).
 
     Checksum sits at [11], right after the float, rather than [8] or [13]
     like the other commands — but it's the same universal formula, and
@@ -126,13 +123,39 @@ def build_write_master_volume(volume_db: float) -> bytearray:
     """
     pkt = bytearray(256)
     pkt[0], pkt[1] = 0xE0, 0xA2
-    pkt[2] = CMD_WRITE_MASTER_VOLUME
+    pkt[2] = CMD_WRITE_MASTER_VOLUME  # 0x08 — the volume-write command
     pkt[3] = 0x00
-    struct.pack_into("<H", pkt, 4, channel_addr(0))
-    pkt[6] = SUB_MASTER_VOLUME
-    struct.pack_into("<f", pkt, 7, volume_db)
+    struct.pack_into("<H", pkt, 4, addr)
+    pkt[6] = sub_byte
+    struct.pack_into("<f", pkt, 7, db)
     pkt[11] = compute_checksum(pkt)
     return pkt
+
+
+def build_write_master_volume(volume_db: float) -> bytearray:
+    """CMD 0x08 sub 0x0c — master (Main) volume write.
+
+    Live-captured 2026-07-05 via the uhid shim. Byte-perfect across 17
+    samples spanning -35.9..-0.98 dB, each independently checksum-verified;
+    a final live check (drag to "-20.0 dB" on the app's UI) decoded to
+    -20.02 dB.
+    """
+    return _build_volume_write(channel_addr(0), SUB_MASTER_VOLUME, volume_db)
+
+
+def build_channel_gain(ch: int, db: float) -> bytearray:
+    """CMD 0x08 sub 0x03 — channel N output fader/gain (ch=1..10).
+
+    Live-captured 2026-07-06 by dragging CH3's fader to -6.0 dB:
+        e0 a2 08 00 b7 03 03 00 00 c0 c0 1d   (float32 = -6.00 dB)
+    Same command family as the master volume; only addr and the sub-byte
+    differ. This is the command the app actually uses for faders — NOT the
+    CMD 0x0a WRITE_DSP path that build_write_dsp / the older `write gain`
+    used (that was inferred from pcaps and never matched app fader traffic).
+    """
+    if ch == 0:
+        raise ValueError("ch=0 is the master fader — use build_write_master_volume")
+    return _build_volume_write(channel_addr(ch), SUB_CHANNEL_GAIN, db)
 
 
 def build_channel_flag(ch: int, selector: int, on: bool) -> bytearray:

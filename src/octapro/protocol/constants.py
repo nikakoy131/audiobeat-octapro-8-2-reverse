@@ -24,12 +24,16 @@ REG_INIT: Final = 0x9909
 SESSION_OPEN_ADDR: Final = 0x00B7
 SUB_SESSION_OPEN: Final = 0x1103
 
-# CMD 0x08 SUB 0x0c — direct master-volume write (CH0), live-captured 2026-07-05
-# via a Linux uhid shim replaying the vendor app's own Main-fader drag traffic.
-# CMD 0x08's other sub-family (0x06, e.g. addr=00b7 sub=0206/8206) is unrelated
-# and still unidentified — CMD_UNKNOWN_08 covers that one.
-CMD_WRITE_MASTER_VOLUME: Final = 0x08
+# CMD 0x08 is the volume-write command (float32 dB at [7:11], checksum at [11]),
+# live-captured 2026-07-05/06 via the uhid shim from the vendor app's own
+# fader traffic. The sub-byte at [6] + addr select the target:
+#   sub 0x0c, addr 0x00b7  -> master (Main) volume
+#   sub 0x03, addr 0xNNb7  -> channel N output fader/gain
+# CMD 0x08's other sub-family (0x06, e.g. sub=0206/8206) is unrelated and
+# still unidentified — CMD_UNKNOWN_08 covers that one.
+CMD_WRITE_MASTER_VOLUME: Final = 0x08  # == the volume-write command; kept name for back-compat
 SUB_MASTER_VOLUME: Final = 0x0C
+SUB_CHANNEL_GAIN: Final = 0x03
 
 # CMD 0x05 mute toggle, live-captured 2026-07-06 via the uhid shim
 # (docs/LINUX_UHID_SHIM_PLAN.md). byte[7]=state (1=mute, 0=unmute); addr

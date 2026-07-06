@@ -79,13 +79,16 @@ class TestBuildReadChannel:
 
 
 class TestMasterVolumeWrite:
-    """Wire bytes live-verified 2026-07-04: master volume = gain write to CH0."""
+    """CMD 0x0a WRITE_DSP builder regression test. NOTE: the 2026-07-04 claim
+    that this writes master volume was RETRACTED — CH0 WRITE_DSP force-switches
+    the input source. The real volume write is CMD 0x08 (see
+    TestBuildChannelGain / build_write_master_volume). Kept only to pin the
+    builder's byte layout."""
 
-    def test_ch0_gain_write_bytes(self):
+    def test_ch0_write_dsp_bytes(self):
         from octapro.protocol.packet import build_write_dsp, channel_addr
 
         pkt = build_write_dsp(channel_addr(0), 0x26, 20000.0, 0x3C, 0x0A)
-        # sent live; device ACKed ee bb and staged the volume change
         assert bytes(pkt[:16]) == bytes.fromhex("e0a20a00b7002600409c463c0a250010")
 
     def test_ch0_commit_bytes(self):
@@ -158,6 +161,33 @@ class TestBuildWriteMasterVolume:
             recovered = struct.unpack_from("<f", pkt, 7)[0]
             assert abs(recovered - db) < 0.005
             assert pkt[11] == expected_checksum
+
+
+class TestBuildChannelGain:
+    """Live-captured 2026-07-06: CMD 0x08 sub 0x03 channel fader, from
+    dragging CH3 to -6.0 dB. Same volume-write family as master volume."""
+
+    def test_ch3_minus6_live_bytes(self):
+        from octapro.protocol.packet import build_channel_gain
+
+        assert bytes(build_channel_gain(3, -6.0))[:12] == bytes.fromhex("e0a20800b703030000c0c01d")
+
+    def test_structure_and_sub_byte(self):
+        from octapro.protocol.packet import build_channel_gain
+
+        pkt = build_channel_gain(7, -3.0)
+        assert pkt[2] == 0x08
+        assert struct.unpack_from("<H", pkt, 4)[0] == channel_addr(7)
+        assert pkt[6] == 0x03
+        assert abs(struct.unpack_from("<f", pkt, 7)[0] - (-3.0)) < 0.001
+
+    def test_ch0_rejected(self):
+        import pytest
+
+        from octapro.protocol.packet import build_channel_gain
+
+        with pytest.raises(ValueError):
+            build_channel_gain(0, -6.0)
 
 
 class TestBuildMute:
