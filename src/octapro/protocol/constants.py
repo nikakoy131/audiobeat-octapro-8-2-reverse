@@ -271,6 +271,35 @@ def source_high_code(name: str) -> int:
         raise ValueError(f"unknown high source {name!r}; use one of: bt, usb-disk")
     return code
 
+# CMD 0x20 routing matrix write — live-captured 2026-07-06 via the uhid shim.
+# One packet per OUTPUT channel (addr 0x0Nb7) carries that output's full
+# 14-input crosspoint row. Crosspoint byte = 0x80 + percent (0..100); 0x80 =
+# 0%/off, 0xe4 = 100%. Checksum at byte[35] = (sum(pkt[4:35]) - 0x20) & 0xFF.
+# The 14 crosspoints are NON-contiguous:
+#   IN-1..IN-6                    -> bytes 7..12
+#   BT-L,BT-R,UDISK-L/R,OPT-L/R   -> bytes 23..28
+#   USB-L,USB-R                   -> bytes 31,32
+# Remaining bytes are structural, keyed to the output via m = ((n-1) % 8) + 1:
+#   segB [15:23] = [0x80]*6 + [0x00]*2 with a one-hot 0xe4 "self" marker at
+#                  slot (m-1);
+#   an odd/even (L/R) 0x64 flag at [29]&[33] (odd n) or [30]&[34] (even n).
+# Verified byte-perfect on outputs 1-6, 9, 10. CH7/CH8 (the bridged sub pair)
+# use a DIFFERENT, not-yet-modelled layout and are rejected by the builder.
+CMD_ROUTING: Final = 0x20
+ROUTING_LEVEL_BASE: Final = 0x80          # crosspoint byte = 0x80 + percent
+ROUTING_SELF_MARKER: Final = 0xE4         # one-hot segB marker
+ROUTING_LR_FLAG: Final = 0x64             # odd/even L/R structural flag
+ROUTING_INPUT_NAMES: Final[list[str]] = [
+    "IN-1", "IN-2", "IN-3", "IN-4", "IN-5", "IN-6",
+    "BT-L", "BT-R", "UDISK-L", "UDISK-R", "OPT-L", "OPT-R", "USB-L", "USB-R",
+]
+# Byte offset of each input's crosspoint within the 256-byte packet, same order
+# as ROUTING_INPUT_NAMES.
+ROUTING_INPUT_BYTES: Final[list[int]] = [
+    7, 8, 9, 10, 11, 12, 23, 24, 25, 26, 27, 28, 31, 32,
+]
+ROUTING_BRIDGED_OUTPUTS: Final[frozenset[int]] = frozenset({7, 8})
+
 # Channel addressing
 NUM_CHANNELS: Final = 10
 CHANNEL_ADDR_BASE: Final = 0x00B7

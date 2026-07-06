@@ -643,6 +643,47 @@ with a zero trailer); it is stale app-buffer data the firmware ignores, so the
 builder sends a clean zero trailer. Builder `packet.build_speaker_type(ch,
 code)`; CLI `write speaker-type --channel N --type hf|mf|lf|mhf|mlf|ff`.
 
+### Routing matrix write — SOLVED 2026-07-06 (CMD 0x20, per output row)
+
+The crosspoint mixer is a new opcode **`0x20`**, **one packet per output
+channel** (addr `0x0Nb7`), carrying that output's full **14-input** routing row.
+The device exposes **14 inputs × 10 outputs**; the 14 inputs, in order, are:
+`IN-1..IN-6, BT-L, BT-R, UDISK-L, UDISK-R, OPT-L, OPT-R, USB-L, USB-R`.
+
+**Crosspoint value** = `0x80 + percent` (0..100): `0x80` = 0%/off, `0xe4` =
+100%. **Checksum** at byte[35] = `(sum(pkt[4:35]) − 0x20) & 0xFF` (same `−0x20`
+constant, wider span). The 14 crosspoints are **non-contiguous**:
+
+| bytes | inputs |
+|-------|--------|
+| `[7:13]` | IN-1 … IN-6 |
+| `[23:29]` | BT-L, BT-R, UDISK-L, UDISK-R, OPT-L, OPT-R |
+| `[31:33]` | USB-L, USB-R |
+
+The remaining bytes are **structural**, keyed to the output via
+`m = ((n − 1) mod 8) + 1` (so CH9/CH10 wrap to behave like CH1/CH2):
+- **segB** `[15:23]` = `[0x80]*6 + [0x00]*2` with a one-hot `0xe4` "self" marker
+  at slot `m − 1`.
+- an **odd/even (L/R) `0x64` flag** at `[29]`&`[33]` (odd `n`) or `[30]`&`[34]`
+  (even `n`).
+- default self-routing: output N receives input `IN-m` at 100%.
+
+Fully mapped byte-map (CH1, every input a distinct %):
+```
+idx:  7  8  9 10 11 12|13 14|15 16 17 18 19 20 21 22|23 24 25 26 27 28|29 30|31 32|33 34|35
+CH1:  8b 96 a1 ac b7 c2|00 00|e4 80 80 80 80 80 00 00|8a 94 9e a8 b2 bc|64 00|c6 d0|64 00|13
+      IN1 2  3  4  5  6         (segB one-hot @ m)     BTl r  Ul r  Ol r        USl r
+```
+
+Verified byte-perfect on outputs **1–6, 9, 10**. **CH7/CH8 (the bridged sub
+pair) use a DIFFERENT layout** (values collapse to `0xb2`/`0x32`, the two rows
+mirror each other) and are **not modelled** — the builder rejects them.
+
+Because CMD 0x20 rewrites the whole row atomically and **cannot be read back**,
+a single-crosspoint edit is not possible; you must specify all 14 levels.
+Builder `packet.build_routing_row(output_ch, levels)`; CLI `write routing
+--output N --levels "p1,…,p14"` (dry-run prints the row table + packet).
+
 ### Input source select — SOLVED 2026-07-06 (CMD 0x05, TWO registers)
 
 The app exposes **two independent source dropdowns**, matching the device's two
