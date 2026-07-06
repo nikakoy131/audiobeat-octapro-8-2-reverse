@@ -792,6 +792,42 @@ research but must not be committed against a live device.
 
 ---
 
+### EQ band gain — SOLVED 2026-07-06 (CMD 0x0a, sub-byte = band slot)
+
+The 31-band parametric EQ is written with `WRITE_DSP` (CMD `0x0a`). One
+packet carries a whole band — its **center frequency, gain, and Q** — and
+the **sub-byte at [6] selects which band**: `sub = 0x08 + (band-1)`, so band
+1..31 → sub `0x08`..`0x26`. Live-captured on ch1, two bands:
+
+```
+band 18 (1 kHz) +6.0 dB: e0 a2 0a 00 b7 01 19 00 00 7a 44 b4 0a 2d
+band  8 (100 Hz) −5.0 dB: e0 a2 0a 00 b7 01 0f 00 00 c8 42 46 0a 01
+```
+
+| Field | Bytes | Meaning |
+|-------|-------|---------|
+| CMD | `0a` | WRITE_DSP |
+| ADDR | `b7 NN` | `channel_addr(ch)` |
+| sub | `08+band-1` | band slot (`0x19`=band 18, `0x0f`=band 8) |
+| freq | [7:11] | float32 center Hz — **settable** per band |
+| gain | [11] | `db_to_byte(dB)` = `round(dB×10)+0x78` |
+| Q | [12] | Q byte (`0x0a` = default) |
+| csum | [13] | `(sum(pkt[4:13]) - 0x20) & 0xFF` |
+
+No `[14:16]` trailer (HPF's `00 10`), **no commit** — applies immediately.
+The band is picked by the sub-byte, so the frequency float is a settable
+parameter (move a band's center). **Gain verified on two bands; freq-move
+and Q-change share the packet but their device effect is not yet captured.**
+
+This also explains the old `sub 0x26` "GAIN" from pcaps — that was EQ **band
+31** (20 kHz), not a channel gain.
+
+CLI: `write eq-gain --channel N --band B --db F`. Builder:
+`packet.build_eq_gain(ch, band, gain_db, freq_hz=None, q_byte=0x0a)`;
+band→sub via `constants.eq_band_sub(band)`.
+
+---
+
 ## Still Unknown
 
 See `FINDINGS_MANUAL_GAP.md` for the full manual-vs-known gap and priority

@@ -95,6 +95,8 @@ MUTE_SUB_BYTE_MASTER = 0x0D   # CMD 0x05 byte[6] for master mute; byte[7]=1/0
 MUTE_SUB_BYTE_CHANNEL = 0x01  # CMD 0x05 byte[6] for per-channel mute
 PHASE_SUB_BYTE = 0x02         # CMD 0x05 byte[6] for per-channel phase invert
 BRIDGE_SUB_BYTE = 0x28        # CMD 0x1c byte[6] for CH7+CH8 bridge (state in byte[19])
+EQ_BAND_SUB_MIN = 0x08        # CMD 0x0a byte[6] EQ band slot base (band 1)
+EQ_BAND_SUB_MAX = 0x26        # ... band 31 (sub = 0x08 + band-1)
 
 # Absolute byte offsets in the 256B IN response (8B header + data offset,
 # per src/octapro/protocol/channel.py / packet.py parse_keepalive_knob_vol).
@@ -387,6 +389,21 @@ class UhidShim:
         ):
             bridged = bool(payload[19] & 0x80)
             return f"BRIDGE CH7+CH8 {'ON' if bridged else 'OFF'} (CMD 0x1c sub 0x28)"
+        if (
+            len(payload) >= 13
+            and payload[2] == 0x0A
+            and payload[4] == 0xB7
+            and 1 <= payload[5] <= 10
+            and EQ_BAND_SUB_MIN <= payload[6] <= EQ_BAND_SUB_MAX
+        ):
+            ch = payload[5]
+            band = payload[6] - EQ_BAND_SUB_MIN + 1  # sub = 0x08 + (band-1)
+            freq = struct.unpack_from("<f", payload, 7)[0]
+            db = (payload[11] - 0x78) / 10.0
+            return (
+                f"CH{ch} EQ band {band} ({freq:g} Hz) gain {db:+.1f} dB "
+                f"Q=0x{payload[12]:02x} (CMD 0x0a sub 0x{payload[6]:02x})"
+            )
         return None
 
     def _set_master_volume(self, db: float) -> None:
