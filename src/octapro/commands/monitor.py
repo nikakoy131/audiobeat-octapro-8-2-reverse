@@ -1,9 +1,9 @@
 import logging
 import time
 
-log = logging.getLogger("octapro.monitor")
+from octapro.protocol.constants import SLOPE_NAMES as _SLOPE_NAMES
 
-_SLOPE_NAMES = {0x03: "12 dB/oct", 0x05: "36 dB/oct"}
+log = logging.getLogger("octapro.monitor")
 
 
 def run_monitor(interval: float = 0.5) -> int:

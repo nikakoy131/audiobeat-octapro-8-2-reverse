@@ -61,7 +61,7 @@ def _annotate(data: bytes) -> list[tuple[str, str, str]]:
         ("1:33", _h(1, 33), "routing matrix (32 bytes signed-int8 /10.0 dB)"),
         ("33:39", _h(33, 39), "UNKNOWN (6 bytes)"),
         ("39:43", _h(39, 43), f"HPF freq float32 = {_f32(data, 39):.2f} Hz"),
-        ("43", _b(43), "HPF slope code  (0x05=36 dB/oct, 0x03=12 dB/oct)"),
+        ("43", _b(43), "HPF slope code  (dB/oct = (code+1)*6; 0x00=6 … 0x07=48)"),
         ("44", _b(44), "UNKNOWN byte"),
         ("45:49", _h(45, 49), f"LPF freq float32 = {_f32(data, 45):.2f} Hz"),
         ("49", _b(49), "LPF slope code"),
