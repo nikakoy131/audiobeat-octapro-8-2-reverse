@@ -643,6 +643,41 @@ with a zero trailer); it is stale app-buffer data the firmware ignores, so the
 builder sends a clean zero trailer. Builder `packet.build_speaker_type(ch,
 code)`; CLI `write speaker-type --channel N --type hf|mf|lf|mhf|mlf|ff`.
 
+### Input source select — SOLVED 2026-07-06 (CMD 0x05, TWO registers)
+
+The app exposes **two independent source dropdowns**, matching the device's two
+priority tiers — not one "source" enum. Both are CMD 0x05 at the **global addr
+`0x00b7`**, channel-flag shape (byte[6]=selector, byte[7]=code, byte[8]=checksum,
+plus the same fixed `a0 41 78 26 1f` stale trailer the checksum ignores):
+
+```
+e0 a2 05 00 b7 00 <selector> <code> <csum>
+```
+
+**LOW source** (normal priority) — selector `0x26`. byte[7] is the same enum as
+the keepalive-read source ID (`SOURCE_NAMES`):
+
+| code | source | verified |
+|------|--------|----------|
+| `0x00` | high level | ✓ |
+| `0x01` | low level  | ✓ |
+| `0x02` | opt        | (read ID) |
+| `0x03` | USB audio  | (read ID) |
+
+**HIGH source** (high-priority auto-switch: BT / U-disk) — selector `0x0e`:
+
+| code | source | verified |
+|------|--------|----------|
+| `0x00` | BT       | ✓ |
+| `0x01` | USB disk | ✓ |
+
+Live captures (byte-perfect): low `…26 00 bd` / `…26 01 be`, high `…0e 00 a5`
+/ `…0e 01 a6`. Builders `packet.build_source_low(code)` /
+`build_source_high(code)`; CLI `write source-low --to high-level|low-level|opt|
+usb-audio` and `write source-high --to bt|usb-disk`. Note: when the shim (or a
+real device that rejects the change) keeps echoing the old source in its
+keepalive reply, the app's dropdown snaps back — the write packet is still sent.
+
 ### Solo — SOLVED 2026-07-06 (client-side macro, NOT a device command)
 
 Solo has **no wire command of its own**. Live capture 2026-07-06 (uhid shim)

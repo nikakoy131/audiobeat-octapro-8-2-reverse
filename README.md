@@ -170,6 +170,8 @@ octaproctl write master --db F [--commit]             master (Main) volume, CMD 
 octaproctl write mute --channel N --on|--off [--commit]     N=0 = master mute
 octaproctl write solo --channel N --on|--off [--commit]     mutes all other channels (macro)
 octaproctl write speaker-type --channel N --type hf|mf|lf|mhf|mlf|ff [--commit]
+octaproctl write source-high --to bt|usb-disk [--commit]                high-priority source
+octaproctl write source-low --to high-level|low-level|opt|usb-audio [--commit]   normal source
 octaproctl write phase --channel N --invert|--normal [--commit]
 octaproctl write bridge --on|--off [--commit]         CH7+CH8 bridge
 ```
@@ -262,8 +264,8 @@ GitHub Actions (`release.yml`) builds a wheel + sdist and attaches them to the R
 - [x] **Speaker Type** (`write speaker-type`) — CMD `0x05` selector `0x30`, 1..6 enum (2026-07-06).
 - [ ] **Channel Tuning & Mixer Routing:**
   - Implement writing/applying the **Input Routing Matrix** levels (0–100% mix).
+- [x] **Input Source Switching** (`write source-high` / `write source-low`) — CMD `0x05` @ `0x00b7`, two registers (2026-07-06).
 - [ ] **Preset and Global Configuration:**
-  - Reverse-engineer **Input Source Switching** commands (APTX BT / U-disk / TOSLINK / High-level / RCA).
   - Reverse-engineer **Noise Gate Threshold** configuration.
   - Implement device **Preset Save & Recall** commands (invoking slots M1–M6 from the CLI).
   - Support exporting/applying presets directly from `.dat` configuration files.

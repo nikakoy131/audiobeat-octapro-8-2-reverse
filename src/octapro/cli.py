@@ -389,6 +389,48 @@ def write_solo(
     sys.exit(run_write_solo(channel=channel, solo=on, commit=commit, no_keepalive=no_keepalive))
 
 
+@write_app.command(name="source-high")
+def write_source_high(
+    to: Annotated[
+        str, typer.Option("--to", "-t", help="High-priority source: bt or usb-disk.")
+    ],
+    commit: Annotated[
+        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
+    ] = False,
+    no_keepalive: _NoKA = False,
+    verbose: _Verbose = False,
+    quiet: _Quiet = False,
+    log_file: _LogFile = None,
+) -> None:
+    """Select the HIGH (auto-switch) input source: bt or usb-disk. **Dry-run unless `--commit`.**"""
+    _setup(verbose, quiet, log_file)
+    from octapro.commands.write import run_write_source
+    sys.exit(run_write_source(tier="high", source=to, commit=commit, no_keepalive=no_keepalive))
+
+
+@write_app.command(name="source-low")
+def write_source_low(
+    to: Annotated[
+        str,
+        typer.Option(
+            "--to", "-t", help="Normal-priority source: high-level, low-level, opt, or usb-audio."
+        ),
+    ],
+    commit: Annotated[
+        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
+    ] = False,
+    no_keepalive: _NoKA = False,
+    verbose: _Verbose = False,
+    quiet: _Quiet = False,
+    log_file: _LogFile = None,
+) -> None:
+    """Select the LOW (normal) input source: high-level/low-level/opt/usb-audio.
+    **Dry-run unless `--commit`.**"""
+    _setup(verbose, quiet, log_file)
+    from octapro.commands.write import run_write_source
+    sys.exit(run_write_source(tier="low", source=to, commit=commit, no_keepalive=no_keepalive))
+
+
 @write_app.command(name="speaker-type")
 def write_speaker_type(
     channel: Annotated[
