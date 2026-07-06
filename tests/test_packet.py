@@ -190,6 +190,34 @@ class TestBuildChannelGain:
             build_channel_gain(0, -6.0)
 
 
+class TestBuildChannelDelay:
+    """Live-captured 2026-07-06: CMD 0x08 sub 0x04 time-alignment delay, from
+    dragging CH2's delay to 1.512 ms. float32 milliseconds directly."""
+
+    def test_ch2_live_bytes(self):
+        from octapro.protocol.packet import build_channel_delay
+
+        expected = bytes.fromhex("e0a20800b702043789c13f5d")
+        assert bytes(build_channel_delay(2, 1.512))[:12] == expected
+
+    def test_structure_and_sub_byte(self):
+        from octapro.protocol.packet import build_channel_delay
+
+        pkt = build_channel_delay(4, 0.5)
+        assert pkt[2] == 0x08
+        assert struct.unpack_from("<H", pkt, 4)[0] == channel_addr(4)
+        assert pkt[6] == 0x04
+        assert abs(struct.unpack_from("<f", pkt, 7)[0] - 0.5) < 1e-6
+
+    def test_ch0_rejected(self):
+        import pytest
+
+        from octapro.protocol.packet import build_channel_delay
+
+        with pytest.raises(ValueError):
+            build_channel_delay(0, 1.0)
+
+
 class TestBuildMute:
     """Live-captured 2026-07-06 via the uhid shim: CMD 0x05 mute toggle.
     Master and per-channel use different sub-bytes (byte[6]) — both verified

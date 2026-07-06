@@ -328,6 +328,24 @@ def write_mute(
     sys.exit(run_write_mute(channel=channel, mute=on, commit=commit, no_keepalive=no_keepalive))
 
 
+@write_app.command(name="delay")
+def write_delay(
+    channel: Annotated[int, typer.Option("--channel", "-c", min=1, max=10, help="Channel 1-10.")],
+    ms: Annotated[float, typer.Option("--ms", help="Time-alignment delay in milliseconds.")],
+    commit: Annotated[
+        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
+    ] = False,
+    no_keepalive: _NoKA = False,
+    verbose: _Verbose = False,
+    quiet: _Quiet = False,
+    log_file: _LogFile = None,
+) -> None:
+    """Set a channel's time-alignment delay in ms (CMD 0x08). **Dry-run unless `--commit`.**"""
+    _setup(verbose, quiet, log_file)
+    from octapro.commands.write import run_write_delay
+    sys.exit(run_write_delay(channel=channel, ms=ms, commit=commit, no_keepalive=no_keepalive))
+
+
 @write_app.command(name="phase")
 def write_phase(
     channel: Annotated[int, typer.Option("--channel", "-c", min=1, max=10, help="Channel 1-10.")],
