@@ -190,6 +190,43 @@ class TestBuildChannelGain:
             build_channel_gain(0, -6.0)
 
 
+class TestBuildCrossover:
+    """Live-captured 2026-07-06 (ch8). HPF=sub 0x05, LPF=sub 0x06. slope byte
+    = dB/6-1; filter type: 0=LR, 1=Bessel, 2=Butterworth. No 0x10 trailer."""
+
+    def test_hpf_live_bytes(self):
+        from octapro.protocol.packet import build_hpf
+
+        # ch8 HPF 22 Hz, 30 dB/oct, Bessel
+        pkt = build_hpf(8, 22.0, slope_db=30, filter_type=0x01)
+        assert bytes(pkt[:16]) == bytes.fromhex("e0a20a00b708050000b04104019a0000")
+
+    def test_lpf_live_bytes(self):
+        from octapro.protocol.packet import build_lpf
+
+        # ch8 LPF 85 Hz, 48 dB/oct, Bessel
+        pkt = build_lpf(8, 85.0, slope_db=48, filter_type=0x01)
+        assert bytes(pkt[:16]) == bytes.fromhex("e0a20a00b708060000aa420701990000")
+
+    def test_slope_and_type_encoding(self):
+        from octapro.protocol.constants import slope_db_to_byte
+        from octapro.protocol.packet import build_hpf
+
+        for db, code in [(6, 0), (12, 1), (24, 3), (36, 5), (48, 7)]:
+            assert slope_db_to_byte(db) == code
+            assert build_hpf(1, 100.0, slope_db=db)[11] == code
+
+    def test_bad_slope_rejected(self):
+        import pytest
+
+        from octapro.protocol.packet import build_hpf
+
+        with pytest.raises(ValueError):
+            build_hpf(1, 100.0, slope_db=10)   # not a multiple of 6
+        with pytest.raises(ValueError):
+            build_hpf(1, 100.0, slope_db=54)   # out of range
+
+
 class TestBuildEqBand:
     """Live-captured 2026-07-06: CMD 0x0a EQ band write (gain+freq+Q in one
     packet). sub-byte = 0x08 + (band-1); Q byte = round(Q*10)."""

@@ -165,22 +165,24 @@ Full 16-byte layout (verified by checksum analysis):
 
 ### Known parameter sub-addresses
 
-| SUB  | TYPE_BYTE | Parameter    | PARAM_BYTE meaning  | float32 meaning |
-|------|-----------|--------------|---------------------|-----------------|
-| 0x05 | 0x00      | HPF frequency | slope code          | frequency Hz    |
-| 0x26 | 0x0a      | Channel GAIN  | gain byte           | 20000.0 (ref)   |
+| SUB  | byte[11]  | byte[12]  | Parameter | float32 meaning |
+|------|-----------|-----------|-----------|-----------------|
+| 0x05 | slope     | filter type | HPF | frequency Hz |
+| 0x06 | slope     | filter type | LPF | frequency Hz |
+| 0x08+band-1 | gain | Q byte | EQ band | center freq Hz |
 
-Slope codes (byte after float32):
-- `0x05` = 36 dB/oct (confirmed in CH7 captures)
-- `0x03` = 12 dB/oct (seen in CH1, CH5 readback)
+Fully live-decoded 2026-07-06 — see "HPF/LPF crossover" and "EQ band" below.
 
-### HPF frequency example (CH7, 36 dB/oct):
+**Slope code** (byte[11]) = `dB/oct = (code+1)*6`: `0x00`=6 … `0x05`=36 … `0x07`=48.
+**Filter type** (byte[12]): `0x00`=Linkwitz-Riley, `0x01`=Bessel, `0x02`=Butterworth.
+
+### HPF frequency example (CH7, older pcap — note the trailer)
 
 ```
-e0 a2 0a 00 b7 07 05 cd cc a0 41 05 00 22 00 10  (HPF=20.1 Hz)
-e0 a2 0a 00 b7 07 05 9a 99 a1 41 05 00 bd 00 10  (HPF=20.2 Hz)
-e0 a2 0a 00 b7 07 05 04 00 b0 41 05 00 9d 00 10  (HPF=22.0 Hz)
+e0 a2 0a 00 b7 07 05 cd cc a0 41 05 00 22 00 10  (HPF=20.1 Hz, LR, 36 dB/oct)
 ```
+This older capture has `00 10` at [14:16]; the current app sends `00 00`
+there. The trailer is outside the checksum ([13]) and ignored by the device.
 
 Byte map for first packet:
 ```
@@ -810,6 +812,37 @@ master` instead. `write gain --channel 0` still builds the packet for
 research but must not be committed against a live device.
 
 ---
+
+### HPF / LPF crossover — SOLVED 2026-07-06 (CMD 0x0a, sub 0x05 / 0x06)
+
+High- and low-pass filters are written with `WRITE_DSP` (CMD `0x0a`), same
+shape, distinguished by sub-byte: **HPF = `0x05`, LPF = `0x06`**. One packet
+carries frequency + slope + filter type. Live-captured on ch8:
+
+```
+HPF 22 Hz, 30 dB/oct, Bessel: e0 a2 0a 00 b7 08 05 00 00 b0 41 04 01 9a
+LPF 85 Hz, 48 dB/oct, Bessel: e0 a2 0a 00 b7 08 06 00 00 aa 42 07 01 99
+```
+
+| Field | Bytes | Meaning |
+|-------|-------|---------|
+| sub | [6] | `0x05` HPF / `0x06` LPF |
+| freq | [7:11] | float32 cutoff Hz |
+| slope | [11] | `dB/oct = (code+1)*6`; `0x00`=6 … `0x07`=48 (8-value sweep verified) |
+| type | [12] | `0x00`=Linkwitz-Riley, `0x01`=Bessel, `0x02`=Butterworth |
+| csum | [13] | `(sum(pkt[4:13]) - 0x20) & 0xFF` |
+
+`[14:16]` = `00 00` (the current app sends no trailer; an older pcap had
+`00 10`, ignored by the device). **No commit** — applies immediately.
+
+The slope encoding **corrects** the earlier guess (`0x03` was mislabelled
+12 dB — it's 24 dB; dsp_m2.dat's "unknown `0x01`" is just 12 dB). The old
+`TYPE_HPF=0x00` was actually the Linkwitz-Riley type code.
+
+Builders: `packet.build_hpf(ch, freq, slope_db, filter_type)` /
+`build_lpf(...)` (shared `build_crossover`); slope via
+`constants.slope_db_to_byte`, type via `constants.filter_type_code`.
+CLI: `write hpf` / `write lpf --channel N --freq Hz --slope-db D --type T`.
 
 ### EQ band (gain + freq + Q) — SOLVED 2026-07-06 (CMD 0x0a, sub = band slot)
 

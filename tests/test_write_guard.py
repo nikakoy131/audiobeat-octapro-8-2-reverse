@@ -62,6 +62,20 @@ class TestWriteEqResetDryRun:
         assert run_write_eq_reset(channel=3, commit=False) == 0
 
 
+class TestWriteCrossoverDryRun:
+    def test_hpf_lpf_dry_run(self):
+        from octapro.commands.write import run_write_crossover
+
+        assert run_write_crossover("hpf", 8, 22.0, 30, "bessel", commit=False) == 0
+        assert run_write_crossover("lpf", 8, 85.0, 48, "butterworth", commit=False) == 0
+
+    def test_bad_slope_and_type_return_1(self):
+        from octapro.commands.write import run_write_crossover
+
+        assert run_write_crossover("hpf", 8, 22.0, 10, "bessel", commit=False) == 1  # bad slope
+        assert run_write_crossover("hpf", 8, 22.0, 30, "nope", commit=False) == 1     # bad type
+
+
 class TestWritePhaseDryRun:
     def test_dry_run_no_device_needed(self):
         assert run_write_phase(channel=6, invert=True, commit=False) == 0
