@@ -261,6 +261,39 @@ def run_write_eq_pass(
     return 0
 
 
+def run_write_eq_reset(
+    channel: int,
+    commit: bool,
+    no_keepalive: bool = False,
+) -> int:
+    from octapro.logging import log_packet_in, log_packet_out
+    from octapro.protocol.constants import CMD_READ_BLOCK, SUB_EQ_PASS
+    from octapro.protocol.packet import build_eq_reset, channel_addr
+
+    pkt = build_eq_reset(channel)
+    intent = f"CH{channel} EQ RESET (flatten all bands)"
+
+    if not commit:
+        _dry_run_print(intent, bytes(pkt))
+        return 0
+
+    from octapro.transport.hid import HidTransport
+
+    try:
+        with HidTransport() as t:
+            if not no_keepalive:
+                t.start_keepalive()
+            log_packet_out(CMD_READ_BLOCK, channel_addr(0), SUB_EQ_PASS, bytes(pkt))
+            resp = t.transact(bytes(pkt))
+            log_packet_in(resp)
+            # No separate commit observed for this command — applies immediately.
+            log.info("Written: %s", intent)
+    except Exception as exc:
+        log.error("Write failed: %s", exc)
+        return 1
+    return 0
+
+
 def run_write_phase(
     channel: int,
     invert: bool,
