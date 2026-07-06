@@ -20,6 +20,7 @@ from octapro.protocol.constants import (
     REG_KEEPALIVE,
     SESSION_OPEN_ADDR,
     SUB_BRIDGE,
+    SUB_CHANNEL_DELAY,
     SUB_CHANNEL_GAIN,
     SUB_MASTER_VOLUME,
     SUB_MUTE_CHANNEL,
@@ -156,6 +157,19 @@ def build_channel_gain(ch: int, db: float) -> bytearray:
     if ch == 0:
         raise ValueError("ch=0 is the master fader — use build_write_master_volume")
     return _build_volume_write(channel_addr(ch), SUB_CHANNEL_GAIN, db)
+
+
+def build_channel_delay(ch: int, ms: float) -> bytearray:
+    """CMD 0x08 sub 0x04 — channel N time-alignment delay in milliseconds.
+
+    Live-captured 2026-07-06 by dragging CH2's delay to 1.512 ms:
+        e0 a2 08 00 b7 02 04 37 89 c1 3f 5d   (float32 = 1.512 ms)
+    Same volume-write family as the faders; the delay value is plain
+    milliseconds as float32 (the app's cm/inch modes convert to ms first).
+    """
+    if ch == 0:
+        raise ValueError("delay is per output channel — ch must be 1..10")
+    return _build_volume_write(channel_addr(ch), SUB_CHANNEL_DELAY, ms)
 
 
 def build_channel_flag(ch: int, selector: int, on: bool) -> bytearray:
