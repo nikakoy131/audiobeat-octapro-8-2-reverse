@@ -334,6 +334,21 @@ class TestBuildPhase:
         assert pkt[8] == compute_checksum(_zeroed_csum(pkt))
 
 
+class TestBuildEqPass:
+    """Live-captured 2026-07-06 (ch7): CMD 0x05 channel-flag selector 0x07 =
+    EQ pass/bypass."""
+
+    def test_bypass_on_live_bytes(self):
+        from octapro.protocol.packet import build_eq_pass
+
+        assert bytes(build_eq_pass(7, True))[:9] == bytes.fromhex("e0a20500b7070701a6")
+
+    def test_bypass_off_live_bytes(self):
+        from octapro.protocol.packet import build_eq_pass
+
+        assert bytes(build_eq_pass(7, False))[:9] == bytes.fromhex("e0a20500b7070700a5")
+
+
 class TestBuildBridge:
     """Live-captured 2026-07-06: CMD 0x1c bridge CH7+CH8 (only bridgeable
     pair). Both states byte-perfect incl. the [4:31] checksum."""

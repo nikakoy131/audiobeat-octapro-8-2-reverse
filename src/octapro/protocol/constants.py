@@ -56,6 +56,10 @@ MUTE_OFF: Final = 0x00
 # 1 = 180° (inverted), 0 = 0° (normal).
 SUB_PHASE: Final = 0x02
 
+# CMD 0x05 EQ pass/bypass, live-captured 2026-07-06 (channel 7). Channel-flag
+# selector 0x07: byte[7]=1 bypasses the channel EQ, 0 engages it.
+SUB_EQ_PASS: Final = 0x07
+
 # CMD 0x1c bridge (CH7+CH8 — the only bridgeable pair on this device),
 # live-captured 2026-07-06. addr=0x00b7, byte[6]=sub 0x28, then a fixed
 # 23-byte "walking-bit" payload [8:31] with the bridge state in byte[19]
