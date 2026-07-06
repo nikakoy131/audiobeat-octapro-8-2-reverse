@@ -12,6 +12,7 @@ from octapro.protocol.constants import (
     CHANNEL_ADDR_STRIDE,
     CMD_BRIDGE,
     CMD_READ_BLOCK,
+    CMD_ROUTING,
     CMD_WRITE_DSP,
     CMD_WRITE_MASTER_VOLUME,
     EQ_BAND_CENTERS_HZ,
@@ -19,7 +20,14 @@ from octapro.protocol.constants import (
     KNOWN_STATUSES,
     MUTE_OFF,
     MUTE_ON,
+    NUM_CHANNELS,
     REG_KEEPALIVE,
+    ROUTING_BRIDGED_OUTPUTS,
+    ROUTING_INPUT_BYTES,
+    ROUTING_INPUT_NAMES,
+    ROUTING_LEVEL_BASE,
+    ROUTING_LR_FLAG,
+    ROUTING_SELF_MARKER,
     SESSION_OPEN_ADDR,
     SUB_BRIDGE,
     SUB_CHANNEL_DELAY,
@@ -407,6 +415,58 @@ def build_source_high(code: int) -> bytearray:
     if not 0 <= code <= 1:
         raise ValueError(f"high-source code must be 0 (BT) or 1 (USB disk), got {code}")
     return _build_source_select(SUB_SOURCE_HIGH, code)
+
+
+def build_routing_row(output_ch: int, levels: list[int]) -> bytearray:
+    """CMD 0x20 — set output channel `output_ch`'s full 14-input routing row.
+
+    `levels` is 14 percentages (0..100), one per input in ROUTING_INPUT_NAMES
+    order (IN-1..IN-6, BT-L/R, UDISK-L/R, OPT-L/R, USB-L/R). Live-captured and
+    verified byte-perfect 2026-07-06 on outputs 1-6, 9, 10.
+
+    The whole row is written atomically (there is no per-crosspoint write and
+    CMD 0x20 cannot be read back), so ALL 14 inputs must be specified — omitted
+    inputs are set to 0%. CH7/CH8 (bridged sub pair) use a different layout and
+    are rejected.
+
+    Structure (see constants.CMD_ROUTING): crosspoint byte = 0x80 + percent at
+    ROUTING_INPUT_BYTES positions; structural segB one-hot 0xe4 marker + odd/
+    even 0x64 L/R flags keyed to m = ((n-1) % 8) + 1; checksum at byte[35] =
+    (sum(pkt[4:35]) - 0x20) & 0xFF.
+    """
+    if not 1 <= output_ch <= NUM_CHANNELS:
+        raise ValueError(f"output channel must be 1..{NUM_CHANNELS}, got {output_ch}")
+    if output_ch in ROUTING_BRIDGED_OUTPUTS:
+        raise ValueError(
+            f"CH{output_ch} is the bridged sub pair (CH7/CH8) — its routing layout "
+            "differs and is not supported"
+        )
+    if len(levels) != len(ROUTING_INPUT_NAMES):
+        raise ValueError(f"levels must have {len(ROUTING_INPUT_NAMES)} entries, got {len(levels)}")
+    for name, lv in zip(ROUTING_INPUT_NAMES, levels, strict=True):
+        if not 0 <= lv <= 100:
+            raise ValueError(f"{name} level must be 0..100, got {lv}")
+
+    pkt = _base_packet(CMD_ROUTING, channel_addr(output_ch), 0)
+
+    # 14 input crosspoints
+    for offset, lv in zip(ROUTING_INPUT_BYTES, levels, strict=True):
+        pkt[offset] = ROUTING_LEVEL_BASE + lv
+
+    # structural segB [15:23]: [0x80]*6 + [0x00]*2, one-hot 0xe4 at slot m-1
+    m = ((output_ch - 1) % 8) + 1
+    for i in range(6):
+        pkt[15 + i] = 0x80
+    pkt[15 + (m - 1)] = ROUTING_SELF_MARKER
+
+    # odd/even (L/R) 0x64 flag pairs at [29,30] and [33,34]
+    if output_ch % 2 == 1:  # odd output -> flag on the left byte
+        pkt[29], pkt[33] = ROUTING_LR_FLAG, ROUTING_LR_FLAG
+    else:                   # even output -> flag on the right byte
+        pkt[30], pkt[34] = ROUTING_LR_FLAG, ROUTING_LR_FLAG
+
+    pkt[35] = (sum(pkt[4:35]) - 0x20) & 0xFF
+    return pkt
 
 
 def build_bridge(bridged: bool) -> bytearray:

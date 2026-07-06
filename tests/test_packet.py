@@ -9,6 +9,7 @@ from octapro.protocol.packet import (
     build_mute,
     build_phase,
     build_read_channel,
+    build_routing_row,
     build_source_high,
     build_source_low,
     build_speaker_type,
@@ -347,6 +348,46 @@ class TestBuildMute:
         assert struct.unpack_from("<H", pkt, 4)[0] == channel_addr(7)
         assert pkt[6] == 0x01  # per-channel sub-byte, NOT the master's 0x0d
         assert pkt[8] == compute_checksum(_zeroed_csum(pkt))
+
+
+class TestBuildRoutingRow:
+    """CMD 0x20 routing row — live-captured 2026-07-06. 14 crosspoints at
+    non-contiguous byte offsets, value = 0x80+pct, structural segB one-hot +
+    odd/even 0x64 flag keyed to m=((n-1)%8)+1, checksum (sum[4:35]-0x20) at [35].
+    Verified byte-perfect against the app's own packets for CH1/CH3/CH10."""
+
+    def test_ch1_all_distinct_live_bytes(self):
+        # every input set to a distinct % so each byte is unambiguous
+        pkt = build_routing_row(1, [11, 22, 33, 44, 55, 66, 10, 20, 30, 40, 50, 60, 70, 80])
+        exp = "e0a220 00b70100 8b96a1acb7c2 0000 e48080808080 0000 8a949ea8b2bc 6400 c6d0 6400 13"
+        assert bytes(pkt)[:36] == bytes.fromhex(exp.replace(" ", ""))
+
+    def test_ch3_self_diagonal_and_checksum(self):
+        # m=3 -> segB e4 at byte17; odd output -> 64 00 flags
+        pkt = build_routing_row(3, [50, 0, 100, 0, 0, 0, 100, 0, 100, 0, 100, 0, 100, 0])
+        exp = "e0a220 00b70300 b280e4808080 0000 8080e4808080 0000 e480e480e480 6400 e480 6400 ec"
+        assert bytes(pkt)[:36] == bytes.fromhex(exp.replace(" ", ""))
+
+    def test_ch10_wraps_mod8_and_even_flag(self):
+        # n=10 -> m=2 (segB e4 at byte16); even output -> 00 64 flags
+        pkt = build_routing_row(10, [50, 100, 0, 0, 0, 0, 0, 100, 0, 100, 0, 100, 0, 100])
+        exp = "e0a220 00b70a00 b2e480808080 0000 80e480808080 0000 80e480e480e4 0064 80e4 0064 f3"
+        assert bytes(pkt)[:36] == bytes.fromhex(exp.replace(" ", ""))
+
+    def test_value_encoding(self):
+        pkt = build_routing_row(1, [0, 50, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+        assert pkt[7] == 0x80   # 0%
+        assert pkt[8] == 0xB2   # 50%
+        assert pkt[9] == 0xE4   # 100%
+
+    def test_rejects_bridged_and_bad_input(self):
+        for bad in (7, 8):
+            with pytest.raises(ValueError):
+                build_routing_row(bad, [0] * 14)
+        with pytest.raises(ValueError):
+            build_routing_row(1, [0] * 13)      # wrong count
+        with pytest.raises(ValueError):
+            build_routing_row(1, [101] + [0] * 13)  # out of range
 
 
 class TestBuildSourceSelect:

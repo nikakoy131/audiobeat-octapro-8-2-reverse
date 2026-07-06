@@ -389,6 +389,49 @@ def write_solo(
     sys.exit(run_write_solo(channel=channel, solo=on, commit=commit, no_keepalive=no_keepalive))
 
 
+@write_app.command(name="routing")
+def write_routing(
+    output: Annotated[
+        int, typer.Option("--output", "-o", min=1, max=10, help="Output channel 1-10 (not 7/8).")
+    ],
+    levels: Annotated[
+        str,
+        typer.Option(
+            "--levels", "-l",
+            help="14 comma-separated percentages (0-100), order: IN-1,IN-2,IN-3,IN-4,IN-5,IN-6,"
+            "BT-L,BT-R,UDISK-L,UDISK-R,OPT-L,OPT-R,USB-L,USB-R.",
+        ),
+    ],
+    commit: Annotated[
+        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
+    ] = False,
+    no_keepalive: _NoKA = False,
+    verbose: _Verbose = False,
+    quiet: _Quiet = False,
+    log_file: _LogFile = None,
+) -> None:
+    """Set an output channel's full 14-input routing row (CMD 0x20).
+
+    The whole row is rewritten atomically, so ALL 14 input levels must be given.
+    CH7/CH8 (bridged sub pair) are not supported. **Dry-run unless `--commit`.**
+    """
+    _setup(verbose, quiet, log_file)
+    try:
+        parsed = [int(x.strip()) for x in levels.split(",") if x.strip() != ""]
+    except ValueError:
+        typer.echo("--levels must be comma-separated integers", err=True)
+        raise typer.Exit(1) from None
+    if len(parsed) != 14:
+        typer.echo(f"--levels needs exactly 14 values, got {len(parsed)}", err=True)
+        raise typer.Exit(1)
+    from octapro.commands.write import run_write_routing
+    sys.exit(
+        run_write_routing(
+            output_ch=output, levels=parsed, commit=commit, no_keepalive=no_keepalive
+        )
+    )
+
+
 @write_app.command(name="source-high")
 def write_source_high(
     to: Annotated[
