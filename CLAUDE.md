@@ -128,7 +128,11 @@ CLI: `read master` (CH0 block), `read knob-vol` (keepalive; also shows the input
 source — keepalive byte [11]: 0=high level, 1=low level, 2=opt, 3=USB AUDIO).
 CH0 block [27:31] float = factory noise gate (−88.0).
 
-**Known slope codes:** `0x03`=12 dB/oct, `0x05`=36 dB/oct, `0x01`=unknown (seen in dsp_m2.dat CH3/4)
+**Slope codes** (live-verified 2026-07-06): `dB/oct = (code+1)*6`, so `0x00`=6
+… `0x05`=36 … `0x07`=48. (Corrects the old guess — `0x03` is 24 dB not 12;
+dsp_m2.dat's "unknown `0x01`" is 12 dB.) **Filter type** byte: `0x00`=Linkwitz-
+Riley, `0x01`=Bessel, `0x02`=Butterworth. HPF=CMD 0x0a sub `0x05`, LPF=sub
+`0x06`; both freq[7:11]+slope[11]+type[12]. `write hpf`/`write lpf`.
 
 ## Adding New Write Commands
 
@@ -156,14 +160,14 @@ Query: `jq 'select(.kind=="decode_note")' research.jsonl`
 
 ## What Is Still Unknown
 
-See `CONTEXT_USER.md → Still to Capture` for the priority-ordered list. High-priority items:
-- LPF write sub-address and TYPE_BYTE
-- EQ band gain/Q write addresses
+See `CONTEXT_USER.md → Still to Capture` for the priority-ordered list.
+Most DSP params are now solved (2026-07-06 via the uhid shim): master vol,
+faders, delay, mute, phase, bridge, 31-band EQ (gain/freq/Q), EQ pass/reset,
+HPF+LPF (freq/slope/type). High-priority remaining:
 - Routing matrix write commands
-- EQ band gain/Q/freq, routing matrix, preset save/load, EQ-pass, input source
-  (MUTE + PHASE + BRIDGE + faders + DELAY solved 2026-07-06; more CMD 0x05
-  selectors and CMD 0x08 sub-bytes likely)
-- Slope code `0x01` meaning (seen on CH3/4 HPF in dsp_m2.dat)
+- Input source switching (read-side IDs known)
+- Speaker type; preset save/recall (M1–M6)
+- EQ "reset all" variant (only per-channel reset captured)
 
 ## Analysis Tools (installed on this machine)
 

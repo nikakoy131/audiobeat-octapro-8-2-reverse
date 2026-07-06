@@ -22,29 +22,43 @@ def _dry_run_print(intent: str, pkt: bytes) -> None:
         console.print("  … (rest zeros)")
 
 
-def run_write_hpf(
+def run_write_crossover(
+    kind: str,       # "hpf" or "lpf"
     channel: int,
     freq: float,
-    slope: int,
+    slope_db: int,
+    filter_type: str,
     commit: bool,
     no_keepalive: bool = False,
 ) -> int:
-    from octapro.logging import log_packet_in, log_packet_out, warn_unknown
-    from octapro.protocol.constants import KNOWN_SLOPES, SUB_HPF_FREQ, TYPE_HPF
-    from octapro.protocol.packet import build_dsp_commit, build_write_dsp, channel_addr
+    """HPF/LPF write (CMD 0x0a sub 0x05/0x06): freq + slope (dB/oct) + type.
 
-    if slope not in KNOWN_SLOPES:
-        warn_unknown(
-            "hpf_slope_code",
-            f"0x{slope:02x}",
-            f"write hpf ch={channel} — unverified, proceed with caution",
-        )
-
-    addr = channel_addr(channel)
-    pkt = build_write_dsp(
-        addr=addr, sub_byte=SUB_HPF_FREQ, float_val=freq, param_byte=slope, type_byte=TYPE_HPF
+    Live-verified 2026-07-06 (ch8). No commit packet is sent — the app applies
+    these immediately (the old build_dsp_commit step is now known to be a
+    per-channel unmute, not a required commit; see PROTOCOL.md).
+    """
+    from octapro.logging import log_packet_in, log_packet_out
+    from octapro.protocol.constants import (
+        SUB_HPF_FREQ,
+        SUB_LPF_FREQ,
+        filter_type_code,
     )
-    intent = f"CH{channel} HPF → {freq:.1f} Hz  slope=0x{slope:02x} ({slope})"
+    from octapro.protocol.packet import build_hpf, build_lpf, channel_addr
+
+    try:
+        ftype = filter_type_code(filter_type)
+    except ValueError as exc:
+        log.error("%s", exc)
+        return 1
+    try:
+        build = build_hpf if kind == "hpf" else build_lpf
+        pkt = build(channel, freq, slope_db, ftype)
+    except ValueError as exc:
+        log.error("%s", exc)
+        return 1
+
+    sub = SUB_HPF_FREQ if kind == "hpf" else SUB_LPF_FREQ
+    intent = f"CH{channel} {kind.upper()} → {freq:.1f} Hz, {slope_db} dB/oct, {filter_type}"
 
     if not commit:
         _dry_run_print(intent, bytes(pkt))
@@ -56,15 +70,9 @@ def run_write_hpf(
         with HidTransport() as t:
             if not no_keepalive:
                 t.start_keepalive()
-            log_packet_out(0x0A, addr, SUB_HPF_FREQ, bytes(pkt))
+            log_packet_out(0x0A, channel_addr(channel), sub, bytes(pkt))
             resp = t.transact(bytes(pkt))
             log_packet_in(resp)
-
-            commit_pkt = build_dsp_commit(channel)
-            log_packet_out(0x05, addr, 0x01, bytes(commit_pkt))
-            resp2 = t.transact(bytes(commit_pkt))
-            log_packet_in(resp2)
-
             log.info("Written: %s", intent)
     except Exception as exc:
         log.error("Write failed: %s", exc)

@@ -15,6 +15,7 @@ from octapro.protocol.constants import (
     CMD_WRITE_DSP,
     CMD_WRITE_MASTER_VOLUME,
     EQ_BAND_CENTERS_HZ,
+    FILTER_BESSEL,
     KNOWN_STATUSES,
     MUTE_OFF,
     MUTE_ON,
@@ -24,12 +25,15 @@ from octapro.protocol.constants import (
     SUB_CHANNEL_DELAY,
     SUB_CHANNEL_GAIN,
     SUB_EQ_PASS,
+    SUB_HPF_FREQ,
+    SUB_LPF_FREQ,
     SUB_MASTER_VOLUME,
     SUB_MUTE_CHANNEL,
     SUB_MUTE_MASTER,
     SUB_PHASE,
     SUB_SESSION_OPEN,
     WRITE_DSP_TRAILER,
+    slope_db_to_byte,
 )
 
 # ---------------------------------------------------------------------------
@@ -165,6 +169,43 @@ def build_channel_gain(ch: int, db: float) -> bytearray:
     if ch == 0:
         raise ValueError("ch=0 is the master fader — use build_write_master_volume")
     return _build_volume_write(channel_addr(ch), SUB_CHANNEL_GAIN, db)
+
+
+def build_crossover(
+    ch: int, sub_byte: int, freq_hz: float, slope_db: int, filter_type: int
+) -> bytearray:
+    """CMD 0x0a HPF (sub 0x05) / LPF (sub 0x06) write.
+
+    Live-captured 2026-07-06 (ch8):
+        HPF 22 Hz, 30 dB/oct, Bessel: e0 a2 0a 00 b7 08 05 00 00 b0 41 04 01 9a
+        LPF 85 Hz, 48 dB/oct, Bessel: e0 a2 0a 00 b7 08 06 00 00 aa 42 07 01 99
+    float32 freq at [7:11]; slope code at [11] (`slope_db_to_byte`, dB=(code+1)*6,
+    0x00..0x07 = 6..48 dB/oct); filter-type at [12] (0=Linkwitz-Riley, 1=Bessel,
+    2=Butterworth); checksum at [13]. The [14:16] trailer is 00 00 (not HPF's
+    old 00 10 default) — the vendor app sends no trailer here.
+    """
+    return build_write_dsp(
+        addr=channel_addr(ch),
+        sub_byte=sub_byte,
+        float_val=float(freq_hz),
+        param_byte=slope_db_to_byte(slope_db),
+        type_byte=filter_type,
+        trailer=b"\x00\x00",
+    )
+
+
+def build_hpf(
+    ch: int, freq_hz: float, slope_db: int = 36, filter_type: int = FILTER_BESSEL
+) -> bytearray:
+    """CMD 0x0a sub 0x05 — high-pass filter (freq, slope dB/oct, filter type)."""
+    return build_crossover(ch, SUB_HPF_FREQ, freq_hz, slope_db, filter_type)
+
+
+def build_lpf(
+    ch: int, freq_hz: float, slope_db: int = 36, filter_type: int = FILTER_BESSEL
+) -> bytearray:
+    """CMD 0x0a sub 0x06 — low-pass filter (freq, slope dB/oct, filter type)."""
+    return build_crossover(ch, SUB_LPF_FREQ, freq_hz, slope_db, filter_type)
 
 
 def build_eq_band(

@@ -98,14 +98,69 @@ def eq_band_sub(band: int) -> int:
         raise ValueError(f"band must be 1..{EQ_BAND_COUNT}, got {band}")
     return EQ_BAND_SUB_BASE + (band - 1)
 
+# CMD 0x0a sub 0x06 = LPF freq (HPF is 0x05). Same packet shape as HPF:
+# freq float [7:11], slope byte [11], filter-type byte [12]. Live-verified
+# 2026-07-06 (ch8 LPF 80->85 Hz, slope 24->48, type link->bessel).
+SUB_LPF_FREQ: Final = 0x06
+
 # CMD 0x0a type bytes
-TYPE_HPF: Final = 0x00
 TYPE_GAIN: Final = 0x0A
 
-# Known slope codes (HPF/LPF)
-SLOPE_12DB: Final = 0x03
+# HPF/LPF byte[12] filter type — live-verified 2026-07-06. The old TYPE_HPF=0x00
+# was actually the Linkwitz-Riley code, not an "HPF marker".
+FILTER_LINKWITZ_RILEY: Final = 0x00
+FILTER_BESSEL: Final = 0x01
+FILTER_BUTTERWORTH: Final = 0x02
+FILTER_TYPE_NAMES: Final[dict[int, str]] = {
+    FILTER_LINKWITZ_RILEY: "Linkwitz-Riley",
+    FILTER_BESSEL: "Bessel",
+    FILTER_BUTTERWORTH: "Butterworth",
+}
+_FILTER_TYPE_CODES: Final[dict[str, int]] = {
+    "lr": FILTER_LINKWITZ_RILEY,
+    "linkwitz-riley": FILTER_LINKWITZ_RILEY,
+    "linkwitz": FILTER_LINKWITZ_RILEY,
+    "bessel": FILTER_BESSEL,
+    "butterworth": FILTER_BUTTERWORTH,
+    "butter": FILTER_BUTTERWORTH,
+}
+
+
+def filter_type_code(name: str) -> int:
+    """Map a filter-type name (bessel/butterworth/lr) to its byte."""
+    code = _FILTER_TYPE_CODES.get(name.strip().lower())
+    if code is None:
+        raise ValueError(f"unknown filter type {name!r}; use bessel, butterworth, or lr")
+    return code
+
+# HPF/LPF slope codes — live-verified 2026-07-06 by sweeping ch8 HPF slope
+# through all 8 steps (6..48 dB/oct → byte 0x00..0x07). Linear:
+#   dB/oct = (code + 1) * 6   ⇔   code = dB/oct / 6 - 1
+# This CORRECTS the earlier guess (0x03 was mislabelled 12 dB — it's 24 dB;
+# only 0x05=36 dB was right). dsp_m2.dat's "unknown 0x01" is simply 12 dB.
+SLOPE_STEP_DB: Final = 6
+SLOPE_CODE_MIN: Final = 0x00   # 6 dB/oct
+SLOPE_CODE_MAX: Final = 0x07   # 48 dB/oct
+KNOWN_SLOPES: Final[frozenset[int]] = frozenset(range(SLOPE_CODE_MIN, SLOPE_CODE_MAX + 1))
+SLOPE_NAMES: Final[dict[int, str]] = {
+    c: f"{(c + 1) * SLOPE_STEP_DB} dB/oct" for c in range(SLOPE_CODE_MIN, SLOPE_CODE_MAX + 1)
+}
+# Back-compat aliases (values corrected to the verified encoding)
+SLOPE_12DB: Final = 0x01
 SLOPE_36DB: Final = 0x05
-KNOWN_SLOPES: Final[frozenset[int]] = frozenset({SLOPE_12DB, SLOPE_36DB})
+
+
+def slope_db_to_byte(db_per_oct: int) -> int:
+    """Encode an HPF/LPF slope (dB/oct) to its code. dB must be a 6..48 multiple of 6."""
+    code = db_per_oct // SLOPE_STEP_DB - 1
+    if db_per_oct % SLOPE_STEP_DB or not SLOPE_CODE_MIN <= code <= SLOPE_CODE_MAX:
+        raise ValueError(f"slope must be a multiple of 6 in 6..48 dB/oct, got {db_per_oct}")
+    return code
+
+
+def slope_byte_to_db(code: int) -> int:
+    """Decode a slope code to dB/oct = (code + 1) * 6."""
+    return (code + 1) * SLOPE_STEP_DB
 
 # IN status codes
 STATUS_ACK_SHORT: Final = 0x0002   # magic=eebb; generic ack, also initial "not connected"

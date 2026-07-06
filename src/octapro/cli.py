@@ -240,13 +240,28 @@ def dump_channel(
 # write sub-app
 # ---------------------------------------------------------------------------
 
+def _write_crossover_cmd(
+    kind: str, channel: int, freq: float, slope_db: int, filter_type: str,
+    commit: bool, verbose: bool, quiet: bool, log_file: Path | None, no_keepalive: bool,
+) -> None:
+    _setup(verbose, quiet, log_file)
+    from octapro.commands.write import run_write_crossover
+    sys.exit(run_write_crossover(
+        kind=kind, channel=channel, freq=freq, slope_db=slope_db, filter_type=filter_type,
+        commit=commit, no_keepalive=no_keepalive,
+    ))
+
+
 @write_app.command(name="hpf")
 def write_hpf(
     channel: Annotated[int, typer.Option("--channel", "-c", min=1, max=10, help="Channel 1-10.")],
     freq: Annotated[float, typer.Option("--freq", help="Cutoff frequency in Hz.")],
-    slope: Annotated[
-        int, typer.Option("--slope", help="Slope code byte (0x05=36 dB/oct, 0x03=12 dB/oct).")
-    ] = 0x05,
+    slope_db: Annotated[
+        int, typer.Option("--slope-db", help="Slope in dB/oct (6, 12, 18, 24, 30, 36, 42, 48).")
+    ] = 36,
+    filter_type: Annotated[
+        str, typer.Option("--type", help="Filter type: bessel, butterworth, or lr.")
+    ] = "bessel",
     commit: Annotated[
         bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
     ] = False,
@@ -255,12 +270,34 @@ def write_hpf(
     quiet: _Quiet = False,
     log_file: _LogFile = None,
 ) -> None:
-    """Set HPF frequency on a channel. **Dry-run unless `--commit` is given.**"""
-    _setup(verbose, quiet, log_file)
-    from octapro.commands.write import run_write_hpf
-    sys.exit(run_write_hpf(
-        channel=channel, freq=freq, slope=slope, commit=commit, no_keepalive=no_keepalive
-    ))
+    """Set a channel's high-pass filter (freq, slope, type). **Dry-run unless `--commit`.**"""
+    _write_crossover_cmd(
+        "hpf", channel, freq, slope_db, filter_type, commit, verbose, quiet, log_file, no_keepalive
+    )
+
+
+@write_app.command(name="lpf")
+def write_lpf(
+    channel: Annotated[int, typer.Option("--channel", "-c", min=1, max=10, help="Channel 1-10.")],
+    freq: Annotated[float, typer.Option("--freq", help="Cutoff frequency in Hz.")],
+    slope_db: Annotated[
+        int, typer.Option("--slope-db", help="Slope in dB/oct (6, 12, 18, 24, 30, 36, 42, 48).")
+    ] = 36,
+    filter_type: Annotated[
+        str, typer.Option("--type", help="Filter type: bessel, butterworth, or lr.")
+    ] = "bessel",
+    commit: Annotated[
+        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
+    ] = False,
+    no_keepalive: _NoKA = False,
+    verbose: _Verbose = False,
+    quiet: _Quiet = False,
+    log_file: _LogFile = None,
+) -> None:
+    """Set a channel's low-pass filter (freq, slope, type). **Dry-run unless `--commit`.**"""
+    _write_crossover_cmd(
+        "lpf", channel, freq, slope_db, filter_type, commit, verbose, quiet, log_file, no_keepalive
+    )
 
 
 @write_app.command(name="gain")

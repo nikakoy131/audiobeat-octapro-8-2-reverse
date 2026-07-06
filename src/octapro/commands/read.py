@@ -1,8 +1,8 @@
 import logging
 
-log = logging.getLogger("octapro.read")
+from octapro.protocol.constants import SLOPE_NAMES as _SLOPE_NAMES
 
-_SLOPE_NAMES = {0x03: "12 dB/oct", 0x05: "36 dB/oct"}
+log = logging.getLogger("octapro.read")
 
 # EQ bar meter: diverging around 0 dB, ±12.8 dB = encoding limit of the gain byte
 _EQ_MAX_DB = 12.8
