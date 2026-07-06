@@ -161,6 +161,65 @@ def run_write_mute(
     return 0
 
 
+def run_write_routing(
+    output_ch: int,
+    levels: list[int],
+    commit: bool,
+    no_keepalive: bool = False,
+) -> int:
+    """Set an output channel's full 14-input routing row (CMD 0x20).
+
+    CMD 0x20 rewrites the whole row atomically and cannot be read back, so all
+    14 input percentages must be given (order = constants.ROUTING_INPUT_NAMES).
+    Live-verified on outputs 1-6, 9, 10; CH7/CH8 (bridged) are rejected.
+    """
+    from octapro.logging import log_packet_in, log_packet_out
+    from octapro.protocol.constants import (
+        CMD_ROUTING,
+        ROUTING_INPUT_NAMES,
+    )
+    from octapro.protocol.packet import build_routing_row, channel_addr
+
+    try:
+        pkt = build_routing_row(output_ch, levels)
+    except ValueError as exc:
+        log.error("%s", exc)
+        return 1
+
+    from rich.console import Console
+    from rich.table import Table
+
+    console = Console()
+    intent = f"CH{output_ch} ROUTING ROW"
+    table = Table(title=f"CH{output_ch} routing row (input → level)", show_edge=False)
+    table.add_column("input")
+    table.add_column("level", justify="right")
+    for name, lv in zip(ROUTING_INPUT_NAMES, levels, strict=True):
+        table.add_row(name, f"{lv}%")
+
+    if not commit:
+        _dry_run_print(intent, bytes(pkt))
+        console.print(table)
+        return 0
+
+    console.print(table)
+
+    from octapro.transport.hid import HidTransport
+
+    try:
+        with HidTransport() as t:
+            if not no_keepalive:
+                t.start_keepalive()
+            log_packet_out(CMD_ROUTING, channel_addr(output_ch), 0, bytes(pkt))
+            resp = t.transact(bytes(pkt))
+            log_packet_in(resp)
+            log.info("Written: %s", intent)
+    except Exception as exc:
+        log.error("Write failed: %s", exc)
+        return 1
+    return 0
+
+
 def run_write_source(
     tier: str,          # "high" or "low"
     source: str,

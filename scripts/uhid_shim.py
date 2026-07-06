@@ -434,6 +434,18 @@ class UhidShim:
             names = {1: "HF", 2: "MF", 3: "LF", 4: "MHF", 5: "MLF", 6: "FF"}
             return f"CH{ch} SPEAKER TYPE {names[payload[7]]} (CMD 0x05 sub 0x30)"
         if (
+            len(payload) >= 36
+            and payload[2] == 0x20
+            and payload[4] == 0xB7
+            and 1 <= payload[5] <= 10
+        ):
+            ch = payload[5]
+            names = ["IN-1", "IN-2", "IN-3", "IN-4", "IN-5", "IN-6",
+                     "BT-L", "BT-R", "UDISK-L", "UDISK-R", "OPT-L", "OPT-R", "USB-L", "USB-R"]
+            offs = [7, 8, 9, 10, 11, 12, 23, 24, 25, 26, 27, 28, 31, 32]
+            cps = [f"{n}={payload[o] - 0x80}%" for n, o in zip(names, offs) if payload[o] >= 0x80]
+            return f"CH{ch} ROUTING ROW: {', '.join(cps)} (CMD 0x20)"
+        if (
             len(payload) >= 32
             and payload[2] == 0x1C
             and payload[4:6] == MASTER_VOLUME_ADDR
