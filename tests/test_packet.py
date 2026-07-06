@@ -9,6 +9,8 @@ from octapro.protocol.packet import (
     build_mute,
     build_phase,
     build_read_channel,
+    build_source_high,
+    build_source_low,
     build_speaker_type,
     build_write_dsp,
     build_write_master_volume,
@@ -345,6 +347,37 @@ class TestBuildMute:
         assert struct.unpack_from("<H", pkt, 4)[0] == channel_addr(7)
         assert pkt[6] == 0x01  # per-channel sub-byte, NOT the master's 0x0d
         assert pkt[8] == compute_checksum(_zeroed_csum(pkt))
+
+
+class TestBuildSourceSelect:
+    """Live-captured 2026-07-06 (global addr 0x00b7): two source registers.
+    LOW (selector 0x26) high-level/low-level verified; HIGH (selector 0x0e)
+    BT/USB-disk verified, all byte-perfect incl. checksum."""
+
+    def test_low_source_live_bytes(self):
+        assert bytes(build_source_low(0))[:9] == bytes.fromhex("e0a20500b7002600bd")
+        assert bytes(build_source_low(1))[:9] == bytes.fromhex("e0a20500b7002601be")
+
+    def test_high_source_live_bytes(self):
+        assert bytes(build_source_high(0))[:9] == bytes.fromhex("e0a20500b7000e00a5")
+        assert bytes(build_source_high(1))[:9] == bytes.fromhex("e0a20500b7000e01a6")
+
+    def test_selector_and_addr(self):
+        low = build_source_low(2)
+        high = build_source_high(1)
+        assert struct.unpack_from("<H", low, 4)[0] == 0x00B7
+        assert struct.unpack_from("<H", high, 4)[0] == 0x00B7
+        assert low[6] == 0x26 and low[7] == 2
+        assert high[6] == 0x0E and high[7] == 1
+
+    def test_trailer_is_zero(self):
+        assert bytes(build_source_low(0))[9:16] == bytes(7)
+
+    def test_range_guards(self):
+        with pytest.raises(ValueError):
+            build_source_low(4)
+        with pytest.raises(ValueError):
+            build_source_high(2)
 
 
 class TestBuildSpeakerType:

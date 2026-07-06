@@ -219,13 +219,57 @@ KNOWN_STATUSES: Final[frozenset[int]] = frozenset({
 })
 
 # Input source IDs — keepalive byte [11]; live-mapped 2026-07-05 by cycling
-# the remote panel's source menu (IDs follow the menu order)
+# the remote panel's source menu (IDs follow the menu order). These are the
+# read-side IDs, which also match the LOW-source write enum below.
 SOURCE_NAMES: Final[dict[int, str]] = {
     0x00: "high level",
     0x01: "low level",
     0x02: "opt",
     0x03: "USB AUDIO",
 }
+
+# Input source SELECT writes — live-captured 2026-07-06 via the uhid shim. The
+# app has TWO independent source registers (two dropdowns), both CMD 0x05 at
+# the global addr 0x00b7 with a channel-flag-style shape (byte[6]=selector,
+# byte[7]=code, byte[8]=checksum, plus a fixed stale trailer the checksum
+# ignores):
+#   LOW source  (normal-priority selector): selector 0x26, byte[7] = SOURCE_NAMES
+#               enum (0=high level, 1=low level, 2=opt, 3=USB audio). byte[7]=0/1
+#               verified byte-perfect; 2/3 follow the confirmed read IDs.
+#   HIGH source (high-priority auto-switch): selector 0x0e, byte[7] = 0=BT,
+#               1=USB disk. Both verified byte-perfect.
+SUB_SOURCE_LOW: Final = 0x26
+SUB_SOURCE_HIGH: Final = 0x0E
+SOURCE_LOW_NAMES: Final[dict[int, str]] = SOURCE_NAMES
+SOURCE_HIGH_NAMES: Final[dict[int, str]] = {0x00: "BT", 0x01: "USB disk"}
+_SOURCE_LOW_CODES: Final[dict[str, int]] = {
+    "high-level": 0x00, "high level": 0x00, "hl": 0x00,
+    "low-level": 0x01, "low level": 0x01, "ll": 0x01,
+    "opt": 0x02, "optical": 0x02, "toslink": 0x02,
+    "usb-audio": 0x03, "usb audio": 0x03, "usb-au": 0x03,
+}
+_SOURCE_HIGH_CODES: Final[dict[str, int]] = {
+    "bt": 0x00, "bluetooth": 0x00, "ble": 0x00,
+    "usb-disk": 0x01, "usb disk": 0x01, "udisk": 0x01, "u-disk": 0x01,
+}
+
+
+def source_low_code(name: str) -> int:
+    """Map a low-source name to its byte[7] code (high-level/low-level/opt/usb-audio)."""
+    code = _SOURCE_LOW_CODES.get(name.strip().lower())
+    if code is None:
+        raise ValueError(
+            f"unknown low source {name!r}; use one of: high-level, low-level, opt, usb-audio"
+        )
+    return code
+
+
+def source_high_code(name: str) -> int:
+    """Map a high-source name to its byte[7] code (bt/usb-disk)."""
+    code = _SOURCE_HIGH_CODES.get(name.strip().lower())
+    if code is None:
+        raise ValueError(f"unknown high source {name!r}; use one of: bt, usb-disk")
+    return code
 
 # Channel addressing
 NUM_CHANNELS: Final = 10
