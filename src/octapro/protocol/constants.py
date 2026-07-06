@@ -79,6 +79,20 @@ BRIDGE_PAYLOAD_TEMPLATE: Final = bytes([
 # CMD 0x0a sub-addresses (known)
 SUB_HPF_FREQ: Final = 0x05
 SUB_GAIN: Final = 0x26
+# EQ band write, live-captured 2026-07-06 (ch1: band 18/1 kHz +6.0 dB, and
+# band 8/100 Hz -5.0 dB). One WRITE_DSP carries the whole band: the sub-byte
+# at [6] selects the band slot (sub = 0x08 + (band-1), so band 1..31 -> sub
+# 0x08..0x26); float32 center freq at [7:11] (settable per band); gain byte at
+# [11] (db_to_byte); Q byte at [12] (default 0x0a). No [14:16] trailer, no
+# commit. Gain verified on 2 bands; freq-move and Q-change not yet captured.
+EQ_BAND_SUB_BASE: Final = 0x08
+
+
+def eq_band_sub(band: int) -> int:
+    """Sub-byte at [6] for EQ band `band` (1..31)."""
+    if not 1 <= band <= EQ_BAND_COUNT:
+        raise ValueError(f"band must be 1..{EQ_BAND_COUNT}, got {band}")
+    return EQ_BAND_SUB_BASE + (band - 1)
 
 # CMD 0x0a type bytes
 TYPE_HPF: Final = 0x00

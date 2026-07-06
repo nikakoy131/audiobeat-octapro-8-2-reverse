@@ -328,6 +328,31 @@ def write_mute(
     sys.exit(run_write_mute(channel=channel, mute=on, commit=commit, no_keepalive=no_keepalive))
 
 
+@write_app.command(name="eq-gain")
+def write_eq_gain(
+    channel: Annotated[int, typer.Option("--channel", "-c", min=1, max=10, help="Channel 1-10.")],
+    band: Annotated[
+        int, typer.Option("--band", "-b", min=1, max=31, help="EQ band 1-31 (1=20 Hz … 31=20 kHz).")
+    ],
+    db: Annotated[float, typer.Option("--db", help="Band gain in dB.")],
+    commit: Annotated[
+        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
+    ] = False,
+    no_keepalive: _NoKA = False,
+    verbose: _Verbose = False,
+    quiet: _Quiet = False,
+    log_file: _LogFile = None,
+) -> None:
+    """Set a 31-band EQ band's gain (CMD 0x0a). **Dry-run unless `--commit`.**"""
+    _setup(verbose, quiet, log_file)
+    from octapro.commands.write import run_write_eq_gain
+    sys.exit(
+        run_write_eq_gain(
+            channel=channel, band=band, db=db, commit=commit, no_keepalive=no_keepalive
+        )
+    )
+
+
 @write_app.command(name="delay")
 def write_delay(
     channel: Annotated[int, typer.Option("--channel", "-c", min=1, max=10, help="Channel 1-10.")],

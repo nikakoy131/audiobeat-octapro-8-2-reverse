@@ -14,6 +14,8 @@ from octapro.protocol.constants import (
     CMD_READ_BLOCK,
     CMD_WRITE_DSP,
     CMD_WRITE_MASTER_VOLUME,
+    EQ_BAND_CENTERS_HZ,
+    EQ_DEFAULT_Q_BYTE,
     KNOWN_STATUSES,
     MUTE_OFF,
     MUTE_ON,
@@ -92,8 +94,14 @@ def build_write_dsp(
     float_val: float,
     param_byte: int,
     type_byte: int,
+    trailer: bytes = WRITE_DSP_TRAILER,
 ) -> bytearray:
-    """CMD 0x0a WRITE_DSP. Checksum stored at [13] (not [8])."""
+    """CMD 0x0a WRITE_DSP. Checksum stored at [13] (not [8]).
+
+    The [14:16] trailer is command-specific: HPF uses (0x00, 0x10); the EQ
+    band write (sub 0x19) uses (0x00, 0x00). It sits outside the checksum
+    range, so pass the observed value to stay byte-exact.
+    """
     pkt = bytearray(256)
     pkt[0], pkt[1] = 0xE0, 0xA2
     pkt[2] = CMD_WRITE_DSP
@@ -104,8 +112,8 @@ def build_write_dsp(
     pkt[11] = param_byte
     pkt[12] = type_byte
     pkt[13] = compute_checksum(pkt)
-    pkt[14] = WRITE_DSP_TRAILER[0]
-    pkt[15] = WRITE_DSP_TRAILER[1]
+    pkt[14] = trailer[0]
+    pkt[15] = trailer[1]
     return pkt
 
 
@@ -157,6 +165,45 @@ def build_channel_gain(ch: int, db: float) -> bytearray:
     if ch == 0:
         raise ValueError("ch=0 is the master fader — use build_write_master_volume")
     return _build_volume_write(channel_addr(ch), SUB_CHANNEL_GAIN, db)
+
+
+def build_eq_gain(
+    ch: int,
+    band: int,
+    gain_db: float,
+    freq_hz: float | None = None,
+    q_byte: int = EQ_DEFAULT_Q_BYTE,
+) -> bytearray:
+    """CMD 0x0a WRITE_DSP — set an EQ band's gain (and, in the same packet,
+    its center frequency and Q).
+
+    Live-captured 2026-07-06 on ch1, two bands:
+        band 18 (1 kHz) +6.0 dB: e0 a2 0a 00 b7 01 19 00 00 7a 44 b4 0a 2d
+        band  8 (100 Hz) -5.0 dB: e0 a2 0a 00 b7 01 0f 00 00 c8 42 46 0a 01
+    The sub-byte at [6] selects the band slot (`eq_band_sub`: band 1..31 ->
+    sub 0x08..0x26); float32 center freq at [7:11]; gain byte at [11]
+    (db_to_byte); Q byte at [12]. No [14:16] trailer, no commit.
+
+    `freq_hz` defaults to the band's standard 1/3-octave center
+    (EQ_BAND_CENTERS_HZ); pass a value to also move the band's center — the
+    band is picked by the sub-byte, so the frequency is a settable parameter.
+    Gain is verified on two bands; freq-move and Q-change are not yet
+    live-captured (the wire slots are known, the device response is not).
+    """
+    from octapro.protocol.constants import eq_band_sub
+    from octapro.protocol.gain import db_to_byte
+
+    sub_byte = eq_band_sub(band)  # validates band is 1..31
+    if freq_hz is None:
+        freq_hz = EQ_BAND_CENTERS_HZ[band - 1]
+    return build_write_dsp(
+        addr=channel_addr(ch),
+        sub_byte=sub_byte,
+        float_val=float(freq_hz),
+        param_byte=db_to_byte(gain_db),
+        type_byte=q_byte,
+        trailer=b"\x00\x00",
+    )
 
 
 def build_channel_delay(ch: int, ms: float) -> bytearray:

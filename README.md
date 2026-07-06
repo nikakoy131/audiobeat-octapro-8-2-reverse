@@ -27,7 +27,7 @@ The device uses **USB HID CONTROL** transfers (not interrupt) with 256-byte payl
 | `0x05` | session open | `addr=0x00b7 sub=0x1103` — mandatory first packet after connect. |
 | `0x05` | channel-flag | `addr=0xNNb7`, byte[6]=selector — per-channel booleans: `0x01`=mute, `0x02`=phase, `0x0d`=master mute. |
 | `0x08` | float write | Master fader (sub `0x0c`), channel faders (sub `0x03`, dB), channel delay (sub `0x04`, ms) — float32 at `[7:11]`, applies immediately. |
-| `0x0a` | `WRITE_DSP` | Real-time write of DSP RAM parameters (float32) — HPF. |
+| `0x0a` | `WRITE_DSP` | Real-time DSP RAM writes (float32) — HPF, and 31-band EQ (sub-byte = band slot `0x08+band-1`, carries freq+gain+Q). |
 | `0x1c` | bridge | `addr=0x00b7 sub=0x28` — bridge CH7+CH8 (state in byte[19] bit `0x80`). |
 
 Commands for master volume, mute, phase, and bridge were captured 2026-07-05/06
@@ -134,6 +134,9 @@ uv run octaproctl write master --db -6.0
 # Channel time-alignment delay (CMD 0x08) — ms, dry run
 uv run octaproctl write delay --channel 2 --ms 1.512
 
+# EQ band gain (CMD 0x0a) — band 1-31, dry run
+uv run octaproctl write eq-gain --channel 1 --band 18 --db 6.0
+
 # Mute / phase / bridge — all dry-run unless --commit
 uv run octaproctl write mute --channel 7 --on
 uv run octaproctl write phase --channel 6 --invert
@@ -155,6 +158,7 @@ octaproctl probe <hex> [--commit]                     send raw packet
 octaproctl write hpf --channel N --freq Hz [--slope C] [--commit]
 octaproctl write gain --channel N --db F [--commit]   channel fader (N=1..10, CMD 0x08)
 octaproctl write delay --channel N --ms F [--commit]  channel time-align delay (CMD 0x08)
+octaproctl write eq-gain --channel N --band B --db F [--commit]   31-band EQ gain (CMD 0x0a)
 octaproctl write master --db F [--commit]             master (Main) volume, CMD 0x08
 octaproctl write mute --channel N --on|--off [--commit]     N=0 = master mute
 octaproctl write phase --channel N --invert|--normal [--commit]
@@ -229,6 +233,7 @@ GitHub Actions (`release.yml`) builds a wheel + sdist and attaches them to the R
 - [x] **Real-time Crossover Control:** Set HPF cut-off frequencies and slopes (12/36 dB/octave verified).
 - [x] **Channel Faders:** Per-channel output level (CMD `0x08` sub `0x03`, float32 dB — live-verified CH3 → −6.0 dB, 2026-07-06).
 - [x] **Time Alignment (Delay):** Per-channel delay (CMD `0x08` sub `0x04`, float32 ms — live-verified CH2 → 1.512 ms, 2026-07-06).
+- [x] **EQ Band Gain:** 31-band parametric EQ gain (CMD `0x0a`, sub-byte = band slot — live-verified 2 bands, 2026-07-06).
 - [x] **Linux `uhid` capture rig:** Impersonate the device (VID/PID + iface-4 report descriptor)
   so the vendor Windows app connects under wine and its write packets can be captured directly —
   no live-device guessing. See [`docs/LINUX_UHID_SHIM_PLAN.md`](docs/LINUX_UHID_SHIM_PLAN.md).
@@ -242,7 +247,8 @@ GitHub Actions (`release.yml`) builds a wheel + sdist and attaches them to the R
   - Write commands for **LPF Cutoff Frequency** and **LPF Slope** (capture sub-addresses near `0x07b7`).
   - Document remaining slope codes corresponding to 6/18/24/30/42/48 dB/octave slopes.
   - Discover filter algorithm selection (`Bessel` vs `Butterworth` vs `Linkwitz-Riley`).
-  - Write commands for **EQ Band Center Frequencies, Gains, and Q-Factors** (capture EQ band addresses).
+  - **EQ Band Gain** done (CMD `0x0a`, sub = band slot). Still to capture the device
+    response for **EQ Band Center Frequency moves** and **Q-Factor** changes (both share the packet).
   - Support the **EQ Pass (bypass)** toggle.
 - [ ] **Channel Tuning & Mixer Routing:**
   - Map and implement **Speaker Type** configurations.
