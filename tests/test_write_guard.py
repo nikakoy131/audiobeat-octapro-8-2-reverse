@@ -2,6 +2,7 @@
 
 from octapro.commands.write import (
     run_write_bridge,
+    run_write_delay,
     run_write_gain,
     run_write_master,
     run_write_mute,
@@ -34,6 +35,11 @@ class TestWriteMuteDryRun:
     def test_dry_run_no_device_needed(self):
         assert run_write_mute(channel=0, mute=True, commit=False) == 0
         assert run_write_mute(channel=0, mute=False, commit=False) == 0
+
+
+class TestWriteDelayDryRun:
+    def test_dry_run_no_device_needed(self):
+        assert run_write_delay(channel=2, ms=1.512, commit=False) == 0
 
 
 class TestWritePhaseDryRun:

@@ -686,18 +686,21 @@ The rest of the payload is treated as a fixed template (it never varied
 across captures). If a future capture shows it encoding other live state,
 revisit `BRIDGE_PAYLOAD_TEMPLATE`.
 
-### Volume writes (master + channel faders) — SOLVED (CMD 0x08, not WRITE_DSP)
+### CMD 0x08 float-write family (volume, faders, delay) — SOLVED (not WRITE_DSP)
 
-**CMD `0x08` is the volume-write command** — the app uses it for *both* the
-Main fader and the per-channel output faders. The sub-byte at [6] + the
-address select the target:
+**CMD `0x08` is a general float32-parameter write** — a float at [7:11] with
+the checksum at [11], no commit. The sub-byte at [6] + the address select
+which parameter:
 
-| Control | addr | sub [6] | verified |
-|---------|------|---------|----------|
-| Master (Main) volume | `0x00b7` | `0x0c` | 17 samples + blind −20.0 dB check |
-| Channel N fader/gain | `0xNNb7` | `0x03` | CH3 → −6.00 dB (2026-07-06) |
+| Control | addr | sub [6] | value | verified |
+|---------|------|---------|-------|----------|
+| Master (Main) volume | `0x00b7` | `0x0c` | dB | 17 samples + blind −20.0 dB check |
+| Channel N fader/gain | `0xNNb7` | `0x03` | dB | CH3 → −6.00 dB (2026-07-06) |
+| Channel N delay | `0xNNb7` | `0x04` | ms | CH2 → 1.512 ms (2026-07-06) |
 
-Both are float32 dB at [7:11] with the checksum at [11]; no commit follows.
+All are float32 at [7:11], checksum `(sum(pkt[4:11]) - 0x20) & 0xFF` at [11],
+applied immediately. Distinct DSP parameters likely occupy further sub-bytes
+on this same command — a fast thing to sweep.
 
 > ⚠️ Neither uses `WRITE_DSP` (CMD `0x0a`). The old `write gain` built a
 > `0x0a` sub `0x26` packet (inferred from pcaps, byte-encoded gain) that
@@ -708,6 +711,11 @@ Both are float32 dB at [7:11] with the checksum at [11]; no commit follows.
 **Channel fader** (live CH3 → −6.0 dB): `e0 a2 08 00 b7 03 03 00 00 c0 c0 1d`
 — `0000c0c0` = −6.00 dB, checksum `1d` = `(sum(pkt[4:11]) - 0x20) & 0xFF`.
 Builder `packet.build_channel_gain(ch, db)`; CLI `write gain --channel N --db F`.
+
+**Channel delay** (live CH2 → 1.512 ms): `e0 a2 08 00 b7 02 04 37 89 c1 3f 5d`
+— `3789c13f` = 1.512 ms (plain milliseconds; the app's cm/inch modes convert
+to ms before sending). Builder `packet.build_channel_delay(ch, ms)`; CLI
+`write delay --channel N --ms F`.
 
 **Master volume** — the previously-uncataloged **CMD `0x08` sub `0x0c`**:
 

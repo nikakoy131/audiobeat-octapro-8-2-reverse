@@ -155,7 +155,7 @@ Channel volume range: 0 to -60 dB → bytes 0x78 to 0x14.
 | **EQ Q** | Find Q encoding | Q range 0.4–20 |
 | ~~**MUTE** channel on/off~~ | ~~Find mute flag/command~~ | **DONE 2026-07-06** (master) — CMD 0x05 sub-byte 0x0d, byte[7]=1/0; see PROTOCOL.md "Mute write". Per-channel unverified |
 | ~~**Phase** 0°→180°~~ | ~~Find phase command~~ | **DONE 2026-07-06** — CMD 0x05 selector 0x02; see PROTOCOL.md "Phase invert" |
-| **Delay** (e.g. set 1.5 ms) | Find delay addr + encoding | Range 0–20ms |
+| ~~**Delay** (e.g. set 1.5 ms)~~ | ~~Find delay addr + encoding~~ | **DONE 2026-07-06** — CMD 0x08 sub 0x04, float32 ms; see PROTOCOL.md "CMD 0x08 float-write family" |
 | **Routing** (change one crosspoint) | Find routing matrix command | |
 | **Preset save** (M1 save button) | Find write sequence | 6 slots total |
 | **Preset load** (select M2) | Find read/apply sequence | |

@@ -34,6 +34,10 @@ SUB_SESSION_OPEN: Final = 0x1103
 CMD_WRITE_MASTER_VOLUME: Final = 0x08  # == the volume-write command; kept name for back-compat
 SUB_MASTER_VOLUME: Final = 0x0C
 SUB_CHANNEL_GAIN: Final = 0x03
+# sub 0x04, addr 0xNNb7 -> channel N time-alignment delay, float32 milliseconds
+# (live-verified CH2 -> 1.512 ms, 2026-07-06). The app's cm/inch modes convert
+# to ms before sending.
+SUB_CHANNEL_DELAY: Final = 0x04
 
 # CMD 0x05 mute toggle, live-captured 2026-07-06 via the uhid shim
 # (docs/LINUX_UHID_SHIM_PLAN.md). byte[7]=state (1=mute, 0=unmute); addr
