@@ -26,8 +26,8 @@ The device uses **USB HID CONTROL** transfers (not interrupt) with 256-byte payl
 | `0x05` | `READ_BLOCK` | Read full 256-byte parameter state of a channel (CH0 = master). |
 | `0x05` | session open | `addr=0x00b7 sub=0x1103` — mandatory first packet after connect. |
 | `0x05` | channel-flag | `addr=0xNNb7`, byte[6]=selector — per-channel booleans: `0x01`=mute, `0x02`=phase, `0x0d`=master mute. |
-| `0x08` | master volume | `addr=0x00b7 sub=0x0c` — the real Main-fader write (float32 dB, applies immediately). |
-| `0x0a` | `WRITE_DSP` | Real-time write of DSP RAM parameters (float32) — HPF/gain. |
+| `0x08` | volume write | Master fader (`addr=0x00b7 sub=0x0c`) **and** channel faders (`addr=0xNNb7 sub=0x03`) — float32 dB, applies immediately. |
+| `0x0a` | `WRITE_DSP` | Real-time write of DSP RAM parameters (float32) — HPF. |
 | `0x1c` | bridge | `addr=0x00b7 sub=0x28` — bridge CH7+CH8 (state in byte[19] bit `0x80`). |
 
 Commands for master volume, mute, phase, and bridge were captured 2026-07-05/06
@@ -125,8 +125,8 @@ uv run octaproctl write hpf --channel 7 --freq 25
 # Write HPF — actually apply
 uv run octaproctl write hpf --channel 7 --freq 25 --commit
 
-# Write channel gain — dry run
-uv run octaproctl write gain --channel 7 --db -3.0
+# Write channel fader/gain (CMD 0x08) — dry run
+uv run octaproctl write gain --channel 3 --db -6.0
 
 # Write MASTER (Main) volume — the real command (CMD 0x08), dry run
 uv run octaproctl write master --db -6.0
@@ -150,7 +150,7 @@ octaproctl parse-dat <file> [--channel N]             offline .dat preset decode
 octaproctl decode-pcap <file> [--out jsonl]           offline pcapng decode (needs tshark)
 octaproctl probe <hex> [--commit]                     send raw packet
 octaproctl write hpf --channel N --freq Hz [--slope C] [--commit]
-octaproctl write gain --channel N --db F [--commit]   channel output gain (N=1..10)
+octaproctl write gain --channel N --db F [--commit]   channel fader (N=1..10, CMD 0x08)
 octaproctl write master --db F [--commit]             master (Main) volume, CMD 0x08
 octaproctl write mute --channel N --on|--off [--commit]     N=0 = master mute
 octaproctl write phase --channel N --invert|--normal [--commit]
@@ -223,7 +223,7 @@ GitHub Actions (`release.yml`) builds a wheel + sdist and attaches them to the R
 - [x] **Preset Parsing:** Offline `.dat` preset parser supporting the `US002` format.
 - [x] **Parametric EQ Decoding:** Decode gain and frequencies for all 31 EQ bands.
 - [x] **Real-time Crossover Control:** Set HPF cut-off frequencies and slopes (12/36 dB/octave verified).
-- [x] **Real-time Gain Control:** Channel-specific output gain control.
+- [x] **Channel Faders:** Per-channel output level (CMD `0x08` sub `0x03`, float32 dB — live-verified CH3 → −6.0 dB, 2026-07-06).
 - [x] **Linux `uhid` capture rig:** Impersonate the device (VID/PID + iface-4 report descriptor)
   so the vendor Windows app connects under wine and its write packets can be captured directly —
   no live-device guessing. See [`docs/LINUX_UHID_SHIM_PLAN.md`](docs/LINUX_UHID_SHIM_PLAN.md).
@@ -240,8 +240,6 @@ GitHub Actions (`release.yml`) builds a wheel + sdist and attaches them to the R
   - Write commands for **EQ Band Center Frequencies, Gains, and Q-Factors** (capture EQ band addresses).
   - Support the **EQ Pass (bypass)** toggle.
 - [ ] **Channel Tuning & Mixer Routing:**
-  - **Solo** per-channel toggles (likely another CMD `0x05` channel-flag selector).
-  - Confirm **per-channel fader** writes over USB (channel output gain, live-verified).
   - Map and implement **Speaker Type** configurations.
   - Discover **Time Delay** (alignment) address space and write command layout (0–20 ms).
   - Implement writing/applying the **Input Routing Matrix** levels (0–100% mix).

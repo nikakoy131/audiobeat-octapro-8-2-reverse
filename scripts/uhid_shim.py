@@ -89,6 +89,7 @@ KEEPALIVE_SIG = "04:00b0:a515"     # CMD 0x04 WRITE_PARAM keepalive echo
 MASTER_READ_SIG = "05:00b0:0004"   # CMD 0x05 READ_BLOCK master/CH0
 MASTER_VOLUME_ADDR = bytes([0xB7, 0x00])  # channel_addr(0), LE
 MASTER_VOLUME_SUB_BYTE = 0x0C
+CHANNEL_GAIN_SUB_BYTE = 0x03  # CMD 0x08 byte[6] for per-channel output fader
 MUTE_SUB_BYTE_MASTER = 0x0D   # CMD 0x05 byte[6] for master mute; byte[7]=1/0
 MUTE_SUB_BYTE_CHANNEL = 0x01  # CMD 0x05 byte[6] for per-channel mute
 PHASE_SUB_BYTE = 0x02         # CMD 0x05 byte[6] for per-channel phase invert
@@ -327,6 +328,16 @@ class UhidShim:
             db = struct.unpack_from("<f", payload, 7)[0]
             self._set_master_volume(db)
             return f"MASTER VOLUME WRITE -> {db:+.2f} dB (live state updated)"
+        if (
+            len(payload) >= 11
+            and payload[2] == 0x08
+            and payload[4] == 0xB7
+            and 1 <= payload[5] <= 10
+            and payload[6] == CHANNEL_GAIN_SUB_BYTE
+        ):
+            ch = payload[5]
+            db = struct.unpack_from("<f", payload, 7)[0]
+            return f"CH{ch} FADER -> {db:+.2f} dB (CMD 0x08 sub 0x03)"
         if (
             len(payload) >= 8
             and payload[2] == 0x05
