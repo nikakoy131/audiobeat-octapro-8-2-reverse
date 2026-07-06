@@ -103,6 +103,10 @@ is mandatory after connect — otherwise READ_BLOCK returns a short `ee 55` refu
   `build_eq_reset(ch)`. **Solo is NOT a device command** — the app (and
   `write solo`) mutes every other channel via this same mute selector
   (live-verified 2026-07-06); helper `commands.write.solo_packets(ch, on)`.
+  **Speaker type** shares CMD 0x05 but with its own selector byte[6]=`0x30`
+  and a 1..6 enum in byte[7] (HF..FF, menu order): `write speaker-type`,
+  `build_speaker_type(ch, code)`, `constants.speaker_type_code`. See
+  PROTOCOL.md "Speaker type".
 - `0x0a` WRITE_DSP — real-time DSP write; sub `0x05`=HPF freq; **EQ band
   = sub `0x08 + (band-1)`** (band 1..31 → sub `0x08`..`0x26`), one atomic
   packet carries freq[7:11]+gain[11]+Q[12] (Q byte = round(Q×10)), no trailer,
@@ -168,7 +172,7 @@ faders, delay, mute, phase, bridge, 31-band EQ (gain/freq/Q), EQ pass/reset,
 HPF+LPF (freq/slope/type). High-priority remaining:
 - Routing matrix write commands
 - Input source switching (read-side IDs known)
-- Speaker type; preset save/recall (M1–M6)
+- Preset save/recall (M1–M6)
 - EQ "reset all" variant (only per-channel reset captured)
 
 ## Analysis Tools (installed on this machine)
