@@ -100,7 +100,9 @@ is mandatory after connect — otherwise READ_BLOCK returns a short `ee 55` refu
   Builder: `build_channel_flag(ch, sel, on)`. See PROTOCOL.md "CMD 0x05
   channel-flag family". EQ RST (reset) also uses selector `0x07` but at the
   fixed master addr with the channel in byte[7]: `write eq-reset`,
-  `build_eq_reset(ch)`.
+  `build_eq_reset(ch)`. **Solo is NOT a device command** — the app (and
+  `write solo`) mutes every other channel via this same mute selector
+  (live-verified 2026-07-06); helper `commands.write.solo_packets(ch, on)`.
 - `0x0a` WRITE_DSP — real-time DSP write; sub `0x05`=HPF freq; **EQ band
   = sub `0x08 + (band-1)`** (band 1..31 → sub `0x08`..`0x26`), one atomic
   packet carries freq[7:11]+gain[11]+Q[12] (Q byte = round(Q×10)), no trailer,

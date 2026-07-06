@@ -365,6 +365,30 @@ def write_mute(
     sys.exit(run_write_mute(channel=channel, mute=on, commit=commit, no_keepalive=no_keepalive))
 
 
+@write_app.command(name="solo")
+def write_solo(
+    channel: Annotated[
+        int,
+        typer.Option("--channel", "-c", min=1, max=10, help="Channel to solo (1-10)."),
+    ],
+    on: Annotated[
+        bool, typer.Option("--on/--off", help="Solo (--on) or un-solo (--off).")
+    ] = True,
+    commit: Annotated[
+        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
+    ] = False,
+    no_keepalive: _NoKA = False,
+    verbose: _Verbose = False,
+    quiet: _Quiet = False,
+    log_file: _LogFile = None,
+) -> None:
+    """Solo a channel by muting all others (client-side macro, like the vendor
+    app — there is no device solo command). **Dry-run unless `--commit`.**"""
+    _setup(verbose, quiet, log_file)
+    from octapro.commands.write import run_write_solo
+    sys.exit(run_write_solo(channel=channel, solo=on, commit=commit, no_keepalive=no_keepalive))
+
+
 @write_app.command(name="eq")
 def write_eq(
     channel: Annotated[int, typer.Option("--channel", "-c", min=1, max=10, help="Channel 1-10.")],

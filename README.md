@@ -168,6 +168,7 @@ octaproctl write eq-pass --channel N --on|--off [--commit]   bypass/engage chann
 octaproctl write eq-reset --channel N [--commit]             flatten a channel's EQ (RST)
 octaproctl write master --db F [--commit]             master (Main) volume, CMD 0x08
 octaproctl write mute --channel N --on|--off [--commit]     N=0 = master mute
+octaproctl write solo --channel N --on|--off [--commit]     mutes all other channels (macro)
 octaproctl write phase --channel N --invert|--normal [--commit]
 octaproctl write bridge --on|--off [--commit]         CH7+CH8 bridge
 ```
@@ -248,6 +249,7 @@ GitHub Actions (`release.yml`) builds a wheel + sdist and attaches them to the R
 - [x] **Master Volume Write:** `write master` — CMD `0x08`, direct float32 dB (captured 2026-07-05).
 - [x] **Mute:** `write mute` — master and per-channel (CMD `0x05` channel-flag family, 2026-07-06).
 - [x] **Phase Inversion (0°/180°):** `write phase` (CMD `0x05` selector `0x02`, 2026-07-06).
+- [x] **Solo:** `write solo` — client-side macro (mutes all other channels), no device command (2026-07-06).
 - [x] **CH7+CH8 Bridging:** `write bridge` (CMD `0x1c`, 2026-07-06).
 
 ### Crossover & Equalizer — DONE
