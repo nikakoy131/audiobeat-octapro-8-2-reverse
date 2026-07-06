@@ -103,12 +103,13 @@ is mandatory after connect — otherwise READ_BLOCK returns a short `ee 55` refu
   faders are CMD 0x08; treat 0x0a gain as unverified.)
   **DANGER: never send `0x0a` to CH0 (addr `0x00b7`)** — it force-switches the
   input source to high level (payload ignored), not a volume write.
-- `0x08` **volume write** — float32 dB at `[7:11]`, checksum `[11]`, applies
-  immediately. Master fader = sub `0x0c` addr `0x00b7`; channel N fader = sub
-  `0x03` addr `0xNNb7`. Live-captured via the uhid shim. CLI: `write master
-  --db <v>`, `write gain --channel N --db <v>`. Builders:
-  `build_write_master_volume`, `build_channel_gain`. See PROTOCOL.md
-  "Volume writes".
+- `0x08` **float-write family** — float32 at `[7:11]`, checksum `[11]`, applies
+  immediately. Sub-byte `[6]` selects the parameter: master volume = `0x0c`
+  addr `0x00b7`; channel N fader = `0x03` (dB); channel N delay = `0x04` (ms);
+  all channel subs at addr `0xNNb7`. Live-captured via the uhid shim. CLI:
+  `write master`, `write gain`, `write delay`. Builders:
+  `build_write_master_volume`, `build_channel_gain`, `build_channel_delay`
+  (shared `_build_volume_write`). See PROTOCOL.md "CMD 0x08 float-write family".
 - `0x1c` BRIDGE (sub `0x28`, addr `0x00b7`) — bridge CH7+CH8 (only bridgeable
   pair). Fixed 23-byte payload; state in byte[19] bit `0x80`, checksum at
   byte[31] over `sum(pkt[4:31])`. CLI: `write bridge --on|--off`. Builder:
@@ -153,7 +154,9 @@ See `CONTEXT_USER.md → Still to Capture` for the priority-ordered list. High-p
 - LPF write sub-address and TYPE_BYTE
 - EQ band gain/Q write addresses
 - Routing matrix write commands
-- delay, preset save/load, EQ-pass (MUTE + PHASE + BRIDGE solved 2026-07-06; more CMD 0x05 selectors likely)
+- EQ band gain/Q/freq, routing matrix, preset save/load, EQ-pass, input source
+  (MUTE + PHASE + BRIDGE + faders + DELAY solved 2026-07-06; more CMD 0x05
+  selectors and CMD 0x08 sub-bytes likely)
 - Slope code `0x01` meaning (seen on CH3/4 HPF in dsp_m2.dat)
 
 ## Analysis Tools (installed on this machine)
