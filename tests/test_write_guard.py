@@ -9,16 +9,17 @@ from octapro.commands.write import (
 )
 
 
-class TestMasterGainCommitBlocked:
-    """Live-tested 2026-07-05: CH0 WRITE_DSP force-switches the input source
-    to high level instead of writing volume — commit must be refused."""
+class TestWriteGainChannel:
+    """`write gain` is the per-channel output fader (CMD 0x08 sub 0x03),
+    ch=1..10. ch=0 is rejected — the master fader is `write master`."""
 
-    def test_ch0_commit_refused_without_device(self):
-        # returns 1 before any transport is opened — no device needed
+    def test_ch0_rejected(self):
+        # ch0 returns 1 immediately (dry-run or not) — directs to `write master`
         assert run_write_gain(channel=0, db=-3.0, commit=True) == 1
+        assert run_write_gain(channel=0, db=-3.0, commit=False) == 1
 
-    def test_ch0_dry_run_still_allowed(self):
-        assert run_write_gain(channel=0, db=-3.0, commit=False) == 0
+    def test_channel_dry_run_no_device_needed(self):
+        assert run_write_gain(channel=3, db=-6.0, commit=False) == 0
 
 
 class TestWriteMasterDryRun:

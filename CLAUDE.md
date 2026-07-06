@@ -98,16 +98,17 @@ is mandatory after connect — otherwise READ_BLOCK returns a short `ee 55` refu
   shim. Selectors: `0x01`=mute, `0x02`=phase invert, `0x0d`=master mute (ch0).
   CLI: `write mute`, `write phase`. Builder: `build_channel_flag(ch, sel, on)`.
   See PROTOCOL.md "CMD 0x05 channel-flag family".
-- `0x0a` WRITE_DSP — real-time DSP write; sub `0x05`=HPF freq, sub `0x26`=GAIN.
-  Writes are staged: keepalive echo updates immediately, block only after commit.
+- `0x0a` WRITE_DSP — real-time DSP write; sub `0x05`=HPF freq. (sub `0x26`
+  "GAIN" was inferred from pcaps but the app does NOT use it for faders —
+  faders are CMD 0x08; treat 0x0a gain as unverified.)
   **DANGER: never send `0x0a` to CH0 (addr `0x00b7`)** — it force-switches the
   input source to high level (payload ignored), not a volume write.
-- `0x08` WRITE_MASTER_VOLUME (sub `0x0c`, addr `0x00b7`) — the real master
-  volume write, live-captured 2026-07-05 via a Linux uhid shim (see
-  `docs/LINUX_UHID_SHIM_PLAN.md`, `scripts/uhid_shim.py`). Direct float32 dB
-  at `[7:11]`, checksum at `[11]`, applied immediately (no commit needed).
-  CLI: `write master --db <value> --commit`. See PROTOCOL.md "Master volume
-  write" for the full wire format.
+- `0x08` **volume write** — float32 dB at `[7:11]`, checksum `[11]`, applies
+  immediately. Master fader = sub `0x0c` addr `0x00b7`; channel N fader = sub
+  `0x03` addr `0xNNb7`. Live-captured via the uhid shim. CLI: `write master
+  --db <v>`, `write gain --channel N --db <v>`. Builders:
+  `build_write_master_volume`, `build_channel_gain`. See PROTOCOL.md
+  "Volume writes".
 - `0x1c` BRIDGE (sub `0x28`, addr `0x00b7`) — bridge CH7+CH8 (only bridgeable
   pair). Fixed 23-byte payload; state in byte[19] bit `0x80`, checksum at
   byte[31] over `sum(pkt[4:31])`. CLI: `write bridge --on|--off`. Builder:

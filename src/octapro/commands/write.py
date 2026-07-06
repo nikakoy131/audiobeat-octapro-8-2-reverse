@@ -78,44 +78,26 @@ def run_write_gain(
     commit: bool,
     no_keepalive: bool = False,
 ) -> int:
-    from octapro.logging import log_packet_in, log_packet_out, warn_unknown
-    from octapro.protocol.constants import SUB_GAIN, TYPE_GAIN, WRITE_DSP_GAIN_FLOAT_REF
-    from octapro.protocol.gain import db_to_byte
-    from octapro.protocol.packet import build_dsp_commit, build_write_dsp, channel_addr
+    """Channel output fader/gain, ch=1..10 (CMD 0x08 sub 0x03).
 
-    addr = channel_addr(channel)
-    gain_byte = db_to_byte(db)
-    pkt = build_write_dsp(
-        addr=addr,
-        sub_byte=SUB_GAIN,
-        float_val=WRITE_DSP_GAIN_FLOAT_REF,
-        param_byte=gain_byte,
-        type_byte=TYPE_GAIN,
-    )
-    label = "MASTER" if channel == 0 else f"CH{channel}"
-    intent = f"{label} GAIN → {db:+.1f} dB  (byte=0x{gain_byte:02x})"
+    ch=0 is rejected — the master fader is `write master`. This is the
+    command the vendor app actually sends for channel faders (live-verified
+    CH3 → -6.0 dB, 2026-07-06), replacing the old CMD 0x0a WRITE_DSP guess.
+    """
     if channel == 0:
-        # Live-tested 2026-07-05: this packet does NOT write master volume —
-        # it force-switches the input source to high level (payload ignored).
-        # Use `write master` instead (CMD 0x08, see PROTOCOL.md).
-        warn_unknown(
-            "master_gain_write_blocked",
-            f"0x{gain_byte:02x}",
-            "CH0 WRITE_DSP switches input source to high level instead of "
-            "writing volume — commit refused; dry-run only. Use `write master` instead.",
-        )
+        log.error("ch=0 is the master fader — use `write master --db <value>` instead.")
+        return 1
+
+    from octapro.logging import log_packet_in, log_packet_out
+    from octapro.protocol.constants import CMD_WRITE_MASTER_VOLUME, SUB_CHANNEL_GAIN
+    from octapro.protocol.packet import build_channel_gain, channel_addr
+
+    pkt = build_channel_gain(channel, db)
+    intent = f"CH{channel} FADER → {db:+.2f} dB"
 
     if not commit:
         _dry_run_print(intent, bytes(pkt))
         return 0
-
-    if channel == 0:
-        log.error(
-            "Refusing to commit: CH0 WRITE_DSP is not a volume write — it "
-            "force-switches the input source to high level (PROTOCOL.md). "
-            "Use `write master --db <value> --commit` instead."
-        )
-        return 1
 
     from octapro.transport.hid import HidTransport
 
@@ -123,14 +105,12 @@ def run_write_gain(
         with HidTransport() as t:
             if not no_keepalive:
                 t.start_keepalive()
-            log_packet_out(0x0A, addr, SUB_GAIN, bytes(pkt))
+            log_packet_out(
+                CMD_WRITE_MASTER_VOLUME, channel_addr(channel), SUB_CHANNEL_GAIN, bytes(pkt)
+            )
             resp = t.transact(bytes(pkt))
             log_packet_in(resp)
-
-            commit_pkt = build_dsp_commit(channel)
-            resp2 = t.transact(bytes(commit_pkt))
-            log_packet_in(resp2)
-
+            # No separate commit observed for this command — applies immediately.
             log.info("Written: %s", intent)
     except Exception as exc:
         log.error("Write failed: %s", exc)

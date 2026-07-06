@@ -268,11 +268,11 @@ def write_gain(
     channel: Annotated[
         int,
         typer.Option(
-            "--channel", "-c", min=0, max=10,
-            help="Channel 1-10, or 0 = master volume (byte→dB scale differs, see PROTOCOL.md).",
+            "--channel", "-c", min=1, max=10,
+            help="Channel 1-10 output fader. For the master fader use `write master`.",
         ),
     ],
-    db: Annotated[float, typer.Option("--db", help="Gain in dB.")],
+    db: Annotated[float, typer.Option("--db", help="Fader level in dB.")],
     commit: Annotated[
         bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
     ] = False,
@@ -281,7 +281,7 @@ def write_gain(
     quiet: _Quiet = False,
     log_file: _LogFile = None,
 ) -> None:
-    """Set channel gain in dB. **Dry-run unless `--commit` is given.**"""
+    """Set a channel's output fader/gain in dB (CMD 0x08). **Dry-run unless `--commit`.**"""
     _setup(verbose, quiet, log_file)
     from octapro.commands.write import run_write_gain
     sys.exit(run_write_gain(channel=channel, db=db, commit=commit, no_keepalive=no_keepalive))
