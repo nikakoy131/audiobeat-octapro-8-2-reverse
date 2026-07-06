@@ -404,6 +404,23 @@ def write_eq_pass(
     )
 
 
+@write_app.command(name="eq-reset")
+def write_eq_reset(
+    channel: Annotated[int, typer.Option("--channel", "-c", min=1, max=10, help="Channel 1-10.")],
+    commit: Annotated[
+        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
+    ] = False,
+    no_keepalive: _NoKA = False,
+    verbose: _Verbose = False,
+    quiet: _Quiet = False,
+    log_file: _LogFile = None,
+) -> None:
+    """Reset (flatten) a channel's EQ (CMD 0x05, the RST button). **Dry-run unless `--commit`.**"""
+    _setup(verbose, quiet, log_file)
+    from octapro.commands.write import run_write_eq_reset
+    sys.exit(run_write_eq_reset(channel=channel, commit=commit, no_keepalive=no_keepalive))
+
+
 @write_app.command(name="phase")
 def write_phase(
     channel: Annotated[int, typer.Option("--channel", "-c", min=1, max=10, help="Channel 1-10.")],

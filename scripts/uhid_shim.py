@@ -394,6 +394,14 @@ class UhidShim:
             state = "BYPASS" if payload[7] else "ENGAGED"
             return f"CH{ch} EQ PASS {state} (CMD 0x05 sub 0x07)"
         if (
+            len(payload) >= 8
+            and payload[2] == 0x05
+            and payload[4:6] == MASTER_VOLUME_ADDR
+            and payload[6] == EQ_PASS_SUB_BYTE
+            and 1 <= payload[7] <= 10
+        ):
+            return f"CH{payload[7]} EQ RESET (CMD 0x05 sub 0x07 @ master addr)"
+        if (
             len(payload) >= 32
             and payload[2] == 0x1C
             and payload[4:6] == MASTER_VOLUME_ADDR

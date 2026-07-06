@@ -349,6 +349,38 @@ class TestBuildEqPass:
         assert bytes(build_eq_pass(7, False))[:9] == bytes.fromhex("e0a20500b7070700a5")
 
 
+class TestBuildEqReset:
+    """Live-captured 2026-07-06 (RST on ch7 and ch3): CMD 0x05 selector 0x07
+    at the FIXED master addr, target channel in byte[7]."""
+
+    def test_reset_ch7_live_bytes(self):
+        from octapro.protocol.packet import build_eq_reset
+
+        assert bytes(build_eq_reset(7))[:9] == bytes.fromhex("e0a20500b7000707a5")
+
+    def test_reset_ch3_live_bytes(self):
+        from octapro.protocol.packet import build_eq_reset
+
+        assert bytes(build_eq_reset(3))[:9] == bytes.fromhex("e0a20500b7000703a1")
+
+    def test_addr_is_master_channel_in_byte7(self):
+        from octapro.protocol.packet import build_eq_reset
+
+        pkt = build_eq_reset(5)
+        assert struct.unpack_from("<H", pkt, 4)[0] == 0x00B7  # fixed master addr
+        assert pkt[6] == 0x07 and pkt[7] == 0x05  # selector, then channel
+
+    def test_out_of_range_rejected(self):
+        import pytest
+
+        from octapro.protocol.packet import build_eq_reset
+
+        with pytest.raises(ValueError):
+            build_eq_reset(0)
+        with pytest.raises(ValueError):
+            build_eq_reset(11)
+
+
 class TestBuildBridge:
     """Live-captured 2026-07-06: CMD 0x1c bridge CH7+CH8 (only bridgeable
     pair). Both states byte-perfect incl. the [4:31] checksum."""
