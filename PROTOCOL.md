@@ -596,13 +596,23 @@ Builders: `packet.build_channel_flag(ch, selector, on)`, with `build_mute`,
 exist — capture them the same way. No commit packet follows any of these;
 they apply immediately.
 
-**EQ RST (reset) — PARTIAL.** The EQ "RST" button sent a single
-`e0 a2 05 00 b7 00 07 07 a5` (CMD 0x05, byte[6]=`0x07`, byte[7]=`0x07`, addr
-`0x00b7`) — no 31-band reset burst followed. It reuses the EQ-pass selector
-but with byte[7]=`0x07` and the master address, so it's likely a "reset EQ"
-opcode. Unclear from one sample whether byte[7]=`0x07` is the target channel
-(reset ch7) or a global reset. Needs a second capture on a different channel
-to disambiguate; not yet implemented.
+**EQ RST (reset) — SOLVED 2026-07-06.** The EQ "RST" button flattens a
+channel's EQ. It shares selector `0x07` with EQ pass but is distinguished by
+the address: RST uses the **fixed master address `0x00b7`** and puts the
+**target channel in byte[7]**:
+
+```
+reset ch7: e0 a2 05 00 b7 00 07 07 a5
+reset ch3: e0 a2 05 00 b7 00 07 03 a1
+```
+
+The device flattens the band gains itself (no 31-band write burst). Confirmed
+on two channels (byte[7] = 0x07, 0x03). Builder `packet.build_eq_reset(ch)`;
+CLI `write eq-reset --channel N`. This is the "reset **current** channel"
+action — the app's "reset **all**" dialog option was not captured.
+
+So selector `0x07` means two things by address: at `0xNNb7` → EQ pass toggle
+(byte[7]=bool); at `0x00b7` → reset channel byte[7]'s EQ.
 
 ### Mute write — SOLVED 2026-07-06 (CMD 0x05; master and channel differ)
 

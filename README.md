@@ -161,6 +161,7 @@ octaproctl write gain --channel N --db F [--commit]   channel fader (N=1..10, CM
 octaproctl write delay --channel N --ms F [--commit]  channel time-align delay (CMD 0x08)
 octaproctl write eq --channel N --band B [--db F] [--freq Hz] [--q Q] [--commit]   31-band EQ (CMD 0x0a)
 octaproctl write eq-pass --channel N --on|--off [--commit]   bypass/engage channel EQ
+octaproctl write eq-reset --channel N [--commit]             flatten a channel's EQ (RST)
 octaproctl write master --db F [--commit]             master (Main) volume, CMD 0x08
 octaproctl write mute --channel N --on|--off [--commit]     N=0 = master mute
 octaproctl write phase --channel N --invert|--normal [--commit]
@@ -250,8 +251,8 @@ GitHub Actions (`release.yml`) builds a wheel + sdist and attaches them to the R
   - Document remaining slope codes corresponding to 6/18/24/30/42/48 dB/octave slopes.
   - Discover filter algorithm selection (`Bessel` vs `Butterworth` vs `Linkwitz-Riley`).
   - **31-band EQ** done — gain, center frequency, and Q (CMD `0x0a`, one atomic write per band).
-  - **EQ Pass (bypass)** done (`write eq-pass`, CMD `0x05` selector `0x07`). EQ **RST**
-    (reset) button is a partial finding — needs one more capture to disambiguate.
+  - **EQ Pass** (`write eq-pass`) and **EQ Reset/RST** (`write eq-reset`) done — CMD `0x05`
+    selector `0x07` (pass toggles at `0xNNb7`; reset targets `0x00b7` with channel in byte[7]).
 - [ ] **Channel Tuning & Mixer Routing:**
   - Map and implement **Speaker Type** configurations.
   - Implement writing/applying the **Input Routing Matrix** levels (0–100% mix).
