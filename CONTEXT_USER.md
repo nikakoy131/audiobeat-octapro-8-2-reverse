@@ -150,9 +150,9 @@ Channel volume range: 0 to -60 dB → bytes 0x78 to 0x14.
 | **LPF freq** (change sub LPF 80→100 Hz) | Find LPF write address | Expected near 0x07b7 + offset |
 | **HPF slope** (try 12, 24, 48 dB/oct) | Confirm slope_code values per slope | Currently only 0x05 seen (36dB) |
 | **Filter algorithm** (Bessel vs Butter) | Find algorithm byte | Embedded in same command? |
-| **EQ gain** (one band, known dB) | Find EQ write address | Different addr range |
-| **EQ freq** (move band center) | Confirm EQ freq addr vs HPF addr | |
-| **EQ Q** | Find Q encoding | Q range 0.4–20 |
+| ~~**EQ gain** (one band, known dB)~~ | ~~Find EQ write address~~ | **DONE 2026-07-06** — CMD 0x0a, sub=0x08+(band-1); gain byte[11]; see PROTOCOL.md "EQ band gain" |
+| **EQ freq** (move band center) | Confirm device response — wire slot known (float [7:11] in same EQ packet) | |
+| **EQ Q** | Confirm device response — wire slot known (byte[12], default 0x0a) | Q range 0.4–20 |
 | ~~**MUTE** channel on/off~~ | ~~Find mute flag/command~~ | **DONE 2026-07-06** (master) — CMD 0x05 sub-byte 0x0d, byte[7]=1/0; see PROTOCOL.md "Mute write". Per-channel unverified |
 | ~~**Phase** 0°→180°~~ | ~~Find phase command~~ | **DONE 2026-07-06** — CMD 0x05 selector 0x02; see PROTOCOL.md "Phase invert" |
 | ~~**Delay** (e.g. set 1.5 ms)~~ | ~~Find delay addr + encoding~~ | **DONE 2026-07-06** — CMD 0x08 sub 0x04, float32 ms; see PROTOCOL.md "CMD 0x08 float-write family" |
