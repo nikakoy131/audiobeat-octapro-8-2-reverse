@@ -346,6 +346,36 @@ class TestBuildMute:
         assert pkt[8] == compute_checksum(_zeroed_csum(pkt))
 
 
+class TestSoloMacro:
+    """Solo is a client-side macro, not a device command — live-captured
+    2026-07-06: solo CH3 on sent mute (sub 0x0101) to every channel except CH3;
+    solo off sent unmute (sub 0x0001) to the same set. solo_packets reproduces it."""
+
+    def test_solo_on_mutes_all_others(self):
+        from octapro.commands.write import solo_packets
+
+        pkts = solo_packets(3, True)
+        assert [ch for ch, _ in pkts] == [1, 2, 4, 5, 6, 7, 8, 9, 10]
+        for ch, pkt in pkts:
+            assert pkt == bytes(build_mute(ch, True))
+
+    def test_solo_off_unmutes_all_others(self):
+        from octapro.commands.write import solo_packets
+
+        pkts = solo_packets(3, False)
+        assert [ch for ch, _ in pkts] == [1, 2, 4, 5, 6, 7, 8, 9, 10]
+        # matches the live solo-off batch: CH1 unmute = e0a20500b70101009a
+        assert pkts[0][1][:9] == bytes.fromhex("e0a20500b701010099")
+        for ch, pkt in pkts:
+            assert pkt == bytes(build_mute(ch, False))
+
+    def test_soloed_channel_gets_no_packet(self):
+        from octapro.commands.write import solo_packets
+
+        for target in (1, 7, 10):
+            assert all(ch != target for ch, _ in solo_packets(target, True))
+
+
 def _zeroed_csum(pkt: bytes) -> bytes:
     # helper: compute_checksum sums [4:13] incl. the checksum slot [8];
     # verify against a copy with [8] cleared so the round-trip is well-defined
