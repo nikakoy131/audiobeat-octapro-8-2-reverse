@@ -136,8 +136,9 @@ is mandatory after connect — otherwise READ_BLOCK returns a short `ee 55` refu
   `[31:33]`; structural segB/`0x64` bytes keyed to `m=((n-1)%8)+1`; checksum
   `(sum(pkt[4:35])-0x20)` at `[35]`. Whole row is atomic and unreadable, so all
   14 levels must be given. CLI: `write routing --output N --levels`. Builder:
-  `build_routing_row(ch, levels)`. **CH7/CH8 (bridged) use a different layout,
-  rejected.** See PROTOCOL.md "Routing matrix write".
+  `build_routing_row(ch, levels)`. All CH1-10 supported: CH7/CH8 (sub pair) use
+  a distinct fixed structural template (`ROUTING_SUB_*`); others use the segB
+  one-hot + 0x64 template. See PROTOCOL.md "Routing matrix write".
 
 **Master volume = one value per source, two controls** (resolved 2026-07-05): the
 software "Main" fader and the remote knob (0–35 steps) both show the CH0 block
@@ -182,9 +183,6 @@ See `CONTEXT_USER.md → Still to Capture` for the priority-ordered list.
 Most DSP params are now solved (2026-07-06 via the uhid shim): master vol,
 faders, delay, mute, phase, bridge, 31-band EQ (gain/freq/Q), EQ pass/reset,
 HPF+LPF (freq/slope/type). High-priority remaining:
-- Routing matrix CH7/CH8 (bridged pair) layout — standard outputs solved
-  (CMD 0x20, `write routing`, `build_routing_row`); see PROTOCOL.md
-  "Routing matrix write"
 - Preset save/recall (M1–M6)
 - EQ "reset all" variant (only per-channel reset captured)
 

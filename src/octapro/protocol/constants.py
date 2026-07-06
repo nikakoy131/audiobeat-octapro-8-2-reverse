@@ -283,12 +283,16 @@ def source_high_code(name: str) -> int:
 #   segB [15:23] = [0x80]*6 + [0x00]*2 with a one-hot 0xe4 "self" marker at
 #                  slot (m-1);
 #   an odd/even (L/R) 0x64 flag at [29]&[33] (odd n) or [30]&[34] (even n).
-# Verified byte-perfect on outputs 1-6, 9, 10. CH7/CH8 (the bridged sub pair)
-# use a DIFFERENT, not-yet-modelled layout and are rejected by the builder.
+# Verified byte-perfect on outputs 1-10. Outputs 1-6, 9, 10 use the "standard"
+# structural template above; CH7/CH8 (the sub pair) use a DISTINCT fixed
+# template (ROUTING_SUB_* below) — same crosspoint positions and value
+# encoding, but segB slots 0/1 = 0xb2 (no one-hot 0xe4 self-marker) and the L/R
+# flags are 0x32 on BOTH bytes of each pair instead of one-hot 0x64. Live-
+# verified 2026-07-06 (independent of bridge state).
 CMD_ROUTING: Final = 0x20
 ROUTING_LEVEL_BASE: Final = 0x80          # crosspoint byte = 0x80 + percent
-ROUTING_SELF_MARKER: Final = 0xE4         # one-hot segB marker
-ROUTING_LR_FLAG: Final = 0x64             # odd/even L/R structural flag
+ROUTING_SELF_MARKER: Final = 0xE4         # one-hot segB marker (standard outputs)
+ROUTING_LR_FLAG: Final = 0x64             # odd/even L/R structural flag (standard)
 ROUTING_INPUT_NAMES: Final[list[str]] = [
     "IN-1", "IN-2", "IN-3", "IN-4", "IN-5", "IN-6",
     "BT-L", "BT-R", "UDISK-L", "UDISK-R", "OPT-L", "OPT-R", "USB-L", "USB-R",
@@ -298,7 +302,12 @@ ROUTING_INPUT_NAMES: Final[list[str]] = [
 ROUTING_INPUT_BYTES: Final[list[int]] = [
     7, 8, 9, 10, 11, 12, 23, 24, 25, 26, 27, 28, 31, 32,
 ]
-ROUTING_BRIDGED_OUTPUTS: Final[frozenset[int]] = frozenset({7, 8})
+# CH7/CH8 sub-pair fixed structural template (replaces the standard segB
+# one-hot + 0x64 flags). segB [15:23] = these 8 bytes; both L/R flag pairs
+# [29,30] and [33,34] = 0x32,0x32.
+ROUTING_SUB_PAIR_OUTPUTS: Final[frozenset[int]] = frozenset({7, 8})
+ROUTING_SUB_SEGB: Final[bytes] = bytes([0xB2, 0xB2, 0x80, 0x80, 0x80, 0x80, 0x00, 0x00])
+ROUTING_SUB_FLAG: Final = 0x32
 
 # Channel addressing
 NUM_CHANNELS: Final = 10
