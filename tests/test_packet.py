@@ -380,14 +380,26 @@ class TestBuildRoutingRow:
         assert pkt[8] == 0xB2   # 50%
         assert pkt[9] == 0xE4   # 100%
 
-    def test_rejects_bridged_and_bad_input(self):
-        for bad in (7, 8):
-            with pytest.raises(ValueError):
-                build_routing_row(bad, [0] * 14)
+    def test_ch7_sub_pair_template_live_bytes(self):
+        # CH7/CH8 sub pair: distinct structural template (segB b2 b2 80.., 0x32
+        # flags). Captured with IN-1=30, IN-2=50, IN-3..6=0, BT-L=70, BT-R/
+        # UDISK/OPT=50, USB-L=50, USB-R=80.
+        pkt = build_routing_row(7, [30, 50, 0, 0, 0, 0, 70, 50, 50, 50, 50, 50, 50, 80])
+        exp = "e0a220 00b70700 9eb280808080 0000 b2b280808080 0000 c6b2b2b2b2b2 3232 b2d0 3232 dc"
+        assert bytes(pkt)[:36] == bytes.fromhex(exp.replace(" ", ""))
+
+    def test_ch8_uses_same_sub_template(self):
+        pkt = build_routing_row(8, [0] * 14)
+        assert bytes(pkt)[15:23] == bytes.fromhex("b2b28080808000 00".replace(" ", ""))
+        assert (pkt[29], pkt[30], pkt[33], pkt[34]) == (0x32, 0x32, 0x32, 0x32)
+
+    def test_rejects_bad_input(self):
         with pytest.raises(ValueError):
             build_routing_row(1, [0] * 13)      # wrong count
         with pytest.raises(ValueError):
             build_routing_row(1, [101] + [0] * 13)  # out of range
+        with pytest.raises(ValueError):
+            build_routing_row(11, [0] * 14)     # bad output channel
 
 
 class TestBuildSourceSelect:
