@@ -98,11 +98,12 @@ is mandatory after connect — otherwise READ_BLOCK returns a short `ee 55` refu
   shim. Selectors: `0x01`=mute, `0x02`=phase invert, `0x0d`=master mute (ch0).
   CLI: `write mute`, `write phase`. Builder: `build_channel_flag(ch, sel, on)`.
   See PROTOCOL.md "CMD 0x05 channel-flag family".
-- `0x0a` WRITE_DSP — real-time DSP write; sub `0x05`=HPF freq; **EQ band gain
-  = sub `0x08 + (band-1)`** (band 1..31 → sub `0x08`..`0x26`), one packet
-  carries freq[7:11]+gain[11]+Q[12], no trailer, no commit. `write eq-gain`,
-  builder `build_eq_gain`, `constants.eq_band_sub`. (The old `sub 0x26 GAIN`
-  from pcaps was actually EQ band 31, not a channel gain.)
+- `0x0a` WRITE_DSP — real-time DSP write; sub `0x05`=HPF freq; **EQ band
+  = sub `0x08 + (band-1)`** (band 1..31 → sub `0x08`..`0x26`), one atomic
+  packet carries freq[7:11]+gain[11]+Q[12] (Q byte = round(Q×10)), no trailer,
+  no commit. All three live-verified. `write eq`, builder `build_eq_band`,
+  `constants.eq_band_sub`, `eq.q_to_byte`. (The old `sub 0x26 GAIN` from pcaps
+  was actually EQ band 31, not a channel gain.)
   **DANGER: never send `0x0a` to CH0 (addr `0x00b7`)** — it force-switches the
   input source to high level (payload ignored), not a volume write.
 - `0x08` **float-write family** — float32 at `[7:11]`, checksum `[11]`, applies
