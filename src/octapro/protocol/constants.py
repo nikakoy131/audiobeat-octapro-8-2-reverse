@@ -19,6 +19,21 @@ REG_FIRMWARE: Final = 0x80F0
 REG_KEEPALIVE: Final = 0xA515
 REG_INIT: Final = 0x9909
 
+# Noise gate — FACTORY-LOCKED (manual: "do not operate by yourself"). Three ops
+# live-captured 2026-07-06 via the uhid shim:
+#   GET (measure): CMD 0x04 WRITE_PARAM reg 0xa212 @ addr 0x00b0, magic csum 0x94
+#                  -> e0 a2 04 00 b0 00 12 a2 94  (triggers the device to measure
+#                  the current noise floor; the value returns on the read side /
+#                  CH0 master block [27:31], factory -88.0)
+#   SET (apply):   CMD 0x08 sub 0x12 @ addr 0x00b7, float32 dB threshold (same
+#                  float-write family as master volume) -> ...12 <f32 dB>
+#   ON/OFF:        CMD 0x05 selector 0x29 @ addr 0x00b7, byte[7]=1 on / 0 off
+#                  -> off: e0 a2 05 00 b7 00 29 00 c0
+REG_NOISE_GATE: Final = 0xA212
+NOISE_GATE_GET_CSUM: Final = 0x94
+SUB_NOISE_GATE_SET: Final = 0x12
+SUB_NOISE_GATE_ONOFF: Final = 0x29
+
 # CMD 0x05 session open (usb1.pcapng frame 107) — must be sent once after
 # connecting or the device answers READ_BLOCK with a short ee55 refusal ACK
 SESSION_OPEN_ADDR: Final = 0x00B7

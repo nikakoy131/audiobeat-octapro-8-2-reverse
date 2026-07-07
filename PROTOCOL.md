@@ -646,6 +646,24 @@ with a zero trailer); it is stale app-buffer data the firmware ignores, so the
 builder sends a clean zero trailer. Builder `packet.build_speaker_type(ch,
 code)`; CLI `write speaker-type --channel N --type hf|mf|lf|mhf|mlf|ff`.
 
+### Noise gate — SOLVED 2026-07-06 (get / set / on-off — FACTORY-LOCKED)
+
+The noise-gate threshold lives in the app's Setting/Option dropdown, not the
+main UI. The manual says **"do not operate by yourself (factory set)"**. Three
+operations, all live-captured:
+
+| op | packet | notes |
+|----|--------|-------|
+| **get** | `e0 a2 04 00 b0 00 12 a2 94` | CMD 0x04 WRITE_PARAM reg `0xa212` @ `0x00b0` (magic csum `0x94`). Triggers a floor re-measurement; the value returns on the read side (also CH0 block `[27:31]`, factory −88.0). |
+| **set** | `e0 a2 08 00 b7 00 12 <f32 dB> <csum>` | CMD 0x08 **sub `0x12`** — the master-volume float-write family with a different sub-byte. Captured `-88.0` → `00 00 b0 c2`, csum `1b`. |
+| **on/off** | `e0 a2 05 00 b7 00 29 <1|0> <csum>` | CMD 0x05 selector `0x29` @ `0x00b7`; byte[7]=1 on / 0 off. Captured off → `…29 00 c0`. |
+
+Note: with the uhid shim (canned replies), "get" reads back the shim's canned
+CH0 floor (−88.0), so "set" re-sends −88.0 regardless of the typed value — on
+real hardware "get" measures the live floor. Builders `packet.
+build_noise_gate_get()` / `build_noise_gate_set(db)` / `build_noise_gate_onoff
+(on)`; CLI `write noise-gate get|set --db X|on|off` (warns it's factory-locked).
+
 ### Preset save / recall — SOLVED 2026-07-06 (CMD 0x08 sub 0x06, M1–M6)
 
 The 6 preset slots (M1–M6) save/recall via **CMD 0x08, sub-byte `0x06`**, addr

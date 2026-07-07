@@ -151,7 +151,11 @@ software "Main" fader and the remote knob (0–35 steps) both show the CH0 block
 float [9:13] (= keepalive echo float); each input source stores its own level.
 CLI: `read master` (CH0 block), `read knob-vol` (keepalive; also shows the input
 source — keepalive byte [11]: 0=high level, 1=low level, 2=opt, 3=USB AUDIO).
-CH0 block [27:31] float = factory noise gate (−88.0).
+CH0 block [27:31] float = factory noise gate (−88.0). **Noise gate write**
+(factory-locked): `get`=CMD 0x04 reg `0xa212` @ 0x00b0, `set`=CMD 0x08 sub
+`0x12` (float dB @ 0x00b7), `on/off`=CMD 0x05 sel `0x29`. CLI `write
+noise-gate get|set --db X|on|off`; builders `build_noise_gate_get/set/onoff`.
+See PROTOCOL.md "Noise gate".
 
 **Slope codes** (live-verified 2026-07-06): `dB/oct = (code+1)*6`, so `0x00`=6
 … `0x05`=36 … `0x07`=48. (Corrects the old guess — `0x03` is 24 dB not 12;
@@ -185,13 +189,13 @@ Query: `jq 'select(.kind=="decode_note")' research.jsonl`
 
 ## What Is Still Unknown
 
-See `CONTEXT_USER.md → Still to Capture` for the priority-ordered list.
-Most DSP params are now solved (2026-07-06 via the uhid shim): master vol,
-faders, delay, mute, phase, bridge, 31-band EQ (gain/freq/Q), EQ pass/reset
-(incl. reset-all),
-HPF+LPF (freq/slope/type), routing matrix (all 10 outputs), input source
-select, speaker type, preset save/recall. Remaining:
-- Noise gate threshold (factory-set, low priority)
+**Nothing major remains** — every device control is now reverse-engineered and
+exposed via the CLI (2026-07-06, via the uhid shim): master vol, faders, delay,
+mute, phase, solo (macro), bridge, speaker type, 31-band EQ (gain/freq/Q), EQ
+pass, EQ reset (per-channel + all), HPF+LPF (freq/slope/type), input source
+(high+low), routing matrix (all 10 outputs incl. CH7/CH8 sub-pair), preset
+save/recall (M1-M6), and the factory-locked noise gate (get/set/on-off).
+Only remaining nicety: applying `.dat` presets directly from file.
 
 ## Analysis Tools (installed on this machine)
 
