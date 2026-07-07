@@ -268,11 +268,47 @@ GitHub Actions (`release.yml`) builds a wheel + sdist and attaches them to the R
 - [x] **31-band EQ** — gain, center frequency, and Q (one atomic write per band).
 - [x] **EQ Pass** (`write eq-pass`) and **EQ Reset/RST** (`write eq-reset`, per-channel + `--all`) — CMD `0x05` selector `0x07`.
 
-### Planned Features & Roadblocks
+### Device Protocol — Fully Reverse-Engineered
 - [x] **Speaker Type** (`write speaker-type`) — CMD `0x05` selector `0x30`, 1..6 enum (2026-07-06).
 - [x] **Input Source Switching** (`write source --tier high|low`) — CMD `0x05` @ `0x00b7`, two registers (2026-07-06).
 - [x] **Input Routing Matrix** (`write routing`) — CMD `0x20`, per-output 14-input row, value=`0x80`+%, all CH1-10 (2026-07-06).
 - [x] **Preset Save & Recall** (`preset save` / `preset recall`) — CMD `0x08` sub `0x06`, slots M1-M6 (2026-07-06).
 - [x] **Noise Gate** (`write noise-gate get|set|on|off`) — CMD 0x04 reg `0xa212` / CMD 0x08 sub `0x12` / CMD 0x05 sel `0x29`; factory-locked (2026-07-06).
 - [x] **`.dat` Import / Export** (`preset import` / `preset export`) — full US002 round-trip: gain, delay, HPF/LPF (freq/slope/type), speaker type, 31-band EQ (routing excluded — read-format only). Hidden block fields (gain/delay/filter type/speaker type) decoded 2026-07-06.
+
+### Future Ideas (exploratory — not scoped or started)
+
+The device protocol itself is done; these are directions for what to build *on top of* it.
+
+- **Control over Bluetooth, not just USB.** The vendor Windows app has a
+  `CommunicationWorkerFactory` abstraction with four transport backends —
+  `CommunicationWHidWorker` (USB HID), `CommunicationBleWorker`,
+  `CommunicationComWorker` (serial), `CommunicationTcpWorker` — see
+  [`docs/findings/EXE.md`](docs/findings/EXE.md) "Communication layer". So BLE
+  control is architecturally real on the app side. **Unverified:** whether
+  *this device* actually advertises a BLE peripheral for control, or whether
+  the "Bluetooth" in the source list (`write source --tier high --to bt`) is
+  audio-only (APTX-HD) with no control channel. Needs its own capture (e.g.
+  `btmon`/nRF Connect while pairing) before any protocol work starts.
+- **Cross-platform GUI, heavily tested.** Since this project has been almost
+  entirely AI-assisted so far, lean into that for a GUI layer too: a
+  Tauri/Flutter-style desktop+mobile front end over the existing Python
+  protocol/`octaproctl` layer, backed by a much larger automated test suite
+  (golden-packet tests, property-based encoding tests, `.dat` round-trip
+  contract tests) rather than manual QA carrying the correctness burden.
+- **Android app.** Depends on solving a control transport Android can use —
+  either BLE (see above) or USB-OTG host mode replaying the same control
+  packets `octaproctl` sends today. Worth scoping both before committing to one.
+- **User-friendly UI with speaker layout mapped to channels.** A visual mixer
+  showing each channel by its physical role (front-left tweeter, sub, etc.)
+  instead of a bare channel number, using the already-decoded `speaker_type`
+  field (`SPEAKER_TYPE_NAMES` in `protocol/constants.py`) to drive the layout.
+- **REW (Room EQ Wizard) integration.** Translate REW's measured/target filter
+  export into the device's 31-band EQ (`write eq` / `preset import`) for
+  measurement-driven tuning, and/or export the device's current EQ curve back
+  into a REW-importable format.
+- **RC-knob control from an external Android device.** Use a phone as a
+  wireless remote for master volume (mirrors the physical rotary remote /
+  `read knob-vol`), instead of the hardware knob. Depends on the same control-
+  transport question as the Android app above.
 
