@@ -76,6 +76,11 @@ SUB_PHASE: Final = 0x02
 # selector 0x07: byte[7]=1 bypasses the channel EQ, 0 engages it.
 SUB_EQ_PASS: Final = 0x07
 
+# EQ RST (reset) byte[7]: a channel number 1..10 resets that channel ("current"),
+# while 0xff resets ALL channels ("All" dialog option) — live-captured
+# 2026-07-06: e0 a2 05 00 b7 00 07 ff 9d.
+EQ_RESET_ALL: Final = 0xFF
+
 # CMD 0x05 speaker type, live-captured 2026-07-06 (channel 3). Same opcode as
 # the channel-flag family but with its own selector byte[6]=0x30 and a 1..6
 # ENUM in byte[7] (not a 0/1 bool). Enum follows the app's menu order:

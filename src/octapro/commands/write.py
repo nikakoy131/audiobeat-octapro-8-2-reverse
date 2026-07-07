@@ -560,11 +560,16 @@ def run_write_eq_reset(
     no_keepalive: bool = False,
 ) -> int:
     from octapro.logging import log_packet_in, log_packet_out
-    from octapro.protocol.constants import CMD_READ_BLOCK, SUB_EQ_PASS
+    from octapro.protocol.constants import CMD_READ_BLOCK, EQ_RESET_ALL, SUB_EQ_PASS
     from octapro.protocol.packet import build_eq_reset, channel_addr
 
-    pkt = build_eq_reset(channel)
-    intent = f"CH{channel} EQ RESET (flatten all bands)"
+    try:
+        pkt = build_eq_reset(channel)
+    except ValueError as exc:
+        log.error("%s", exc)
+        return 1
+    target = "ALL channels" if channel == EQ_RESET_ALL else f"CH{channel}"
+    intent = f"{target} EQ RESET (flatten all bands)"
 
     if not commit:
         _dry_run_print(intent, bytes(pkt))

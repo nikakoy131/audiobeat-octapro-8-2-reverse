@@ -586,6 +586,13 @@ class TestBuildEqReset:
         assert struct.unpack_from("<H", pkt, 4)[0] == 0x00B7  # fixed master addr
         assert pkt[6] == 0x07 and pkt[7] == 0x05  # selector, then channel
 
+    def test_reset_all_live_bytes(self):
+        # "reset All" dialog option: byte[7]=0xff. Captured: e0 a2 05 00 b7 00 07 ff 9d
+        from octapro.protocol.constants import EQ_RESET_ALL
+        from octapro.protocol.packet import build_eq_reset
+
+        assert bytes(build_eq_reset(EQ_RESET_ALL))[:9] == bytes.fromhex("e0a20500b70007ff9d")
+
     def test_out_of_range_rejected(self):
         import pytest
 

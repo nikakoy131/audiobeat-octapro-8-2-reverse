@@ -16,6 +16,7 @@ from octapro.protocol.constants import (
     CMD_WRITE_DSP,
     CMD_WRITE_MASTER_VOLUME,
     EQ_BAND_CENTERS_HZ,
+    EQ_RESET_ALL,
     FILTER_BESSEL,
     KNOWN_STATUSES,
     MUTE_OFF,
@@ -342,20 +343,21 @@ def build_eq_pass(ch: int, bypass: bool) -> bytearray:
 
 
 def build_eq_reset(ch: int) -> bytearray:
-    """CMD 0x05 EQ reset (RST) — flatten channel `ch`'s EQ.
+    """CMD 0x05 EQ reset (RST) — flatten EQ for channel `ch`, or ALL channels.
 
-    Live-captured 2026-07-06 (RST on ch7 and ch3):
-        reset ch7: e0 a2 05 00 b7 00 07 07 a5
-        reset ch3: e0 a2 05 00 b7 00 07 03 a1
+    Live-captured 2026-07-06:
+        reset ch7:  e0 a2 05 00 b7 00 07 07 a5
+        reset ch3:  e0 a2 05 00 b7 00 07 03 a1
+        reset ALL:  e0 a2 05 00 b7 00 07 ff 9d   (ch = EQ_RESET_ALL = 0xff)
     Shares selector 0x07 with EQ pass, but distinguished by the address: RST
     uses the FIXED master address 0x00b7 and puts the target channel in
     byte[7] (7->0x07, 3->0x03), whereas EQ pass uses addr 0xNNb7 with
-    byte[7]=bool. The device resets the band gains itself (no band-write
-    burst). This is the "reset current channel" action; the app's "reset all"
-    option was not captured.
+    byte[7]=bool. byte[7]=0xff is the "reset All" dialog option; 1..10 is the
+    "reset current channel" option. The device resets the band gains itself
+    (no band-write burst).
     """
-    if not 1 <= ch <= 10:
-        raise ValueError(f"channel must be 1..10, got {ch}")
+    if not (1 <= ch <= 10 or ch == EQ_RESET_ALL):
+        raise ValueError(f"channel must be 1..10 or EQ_RESET_ALL (0xff), got {ch}")
     pkt = _base_packet(CMD_READ_BLOCK, channel_addr(0), 0)
     pkt[6] = SUB_EQ_PASS
     pkt[7] = ch

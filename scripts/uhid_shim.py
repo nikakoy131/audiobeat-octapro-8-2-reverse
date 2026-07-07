@@ -401,9 +401,10 @@ class UhidShim:
             and payload[2] == 0x05
             and payload[4:6] == MASTER_VOLUME_ADDR
             and payload[6] == EQ_PASS_SUB_BYTE
-            and 1 <= payload[7] <= 10
+            and (1 <= payload[7] <= 10 or payload[7] == 0xFF)
         ):
-            return f"CH{payload[7]} EQ RESET (CMD 0x05 sub 0x07 @ master addr)"
+            who = "ALL channels" if payload[7] == 0xFF else f"CH{payload[7]}"
+            return f"{who} EQ RESET (CMD 0x05 sub 0x07 @ master addr)"
         if (
             len(payload) >= 8
             and payload[2] == 0x08
