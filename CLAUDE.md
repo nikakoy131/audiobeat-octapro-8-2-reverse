@@ -100,7 +100,8 @@ is mandatory after connect — otherwise READ_BLOCK returns a short `ee 55` refu
   Builder: `build_channel_flag(ch, sel, on)`. See PROTOCOL.md "CMD 0x05
   channel-flag family". EQ RST (reset) also uses selector `0x07` but at the
   fixed master addr with the channel in byte[7]: `write eq-reset`,
-  `build_eq_reset(ch)`. **Solo is NOT a device command** — the app (and
+  `build_eq_reset(ch)` — byte[7]=`0xff` (`EQ_RESET_ALL`, `write eq-reset --all`)
+  resets ALL channels. **Solo is NOT a device command** — the app (and
   `write solo`) mutes every other channel via this same mute selector
   (live-verified 2026-07-06); helper `commands.write.solo_packets(ch, on)`.
   **Speaker type** shares CMD 0x05 but with its own selector byte[6]=`0x30`
@@ -186,9 +187,11 @@ Query: `jq 'select(.kind=="decode_note")' research.jsonl`
 
 See `CONTEXT_USER.md → Still to Capture` for the priority-ordered list.
 Most DSP params are now solved (2026-07-06 via the uhid shim): master vol,
-faders, delay, mute, phase, bridge, 31-band EQ (gain/freq/Q), EQ pass/reset,
-HPF+LPF (freq/slope/type). High-priority remaining:
-- EQ "reset all" variant (only per-channel reset captured)
+faders, delay, mute, phase, bridge, 31-band EQ (gain/freq/Q), EQ pass/reset
+(incl. reset-all),
+HPF+LPF (freq/slope/type), routing matrix (all 10 outputs), input source
+select, speaker type, preset save/recall. Remaining:
+- Noise gate threshold (factory-set, low priority)
 
 ## Analysis Tools (installed on this machine)
 
