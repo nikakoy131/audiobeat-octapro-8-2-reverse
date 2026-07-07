@@ -176,7 +176,7 @@ Channel volume range: 0 to -60 dB → bytes 0x78 to 0x14.
 | ~~**Input source** switch~~ | ~~Find source select command~~ | **DONE 2026-07-06** — CMD 0x05 @ 0x00b7, two registers: low=selector 0x26, high=selector 0x0e; see PROTOCOL.md "Input source select" |
 | ~~**Main volume** change~~ | ~~Find master vol command~~ | **DONE 2026-07-05** — CMD 0x08 sub 0x0c, see PROTOCOL.md "Master volume write" |
 | ~~**EQ Pass** toggle~~ | ~~Find EQ bypass command~~ | **DONE 2026-07-06** — CMD 0x05 selector 0x07 (channel-flag). EQ RST per-channel + reset-all (byte[7]=0xff) also done |
-| **Noise gate** threshold | Find noise gate cmd | Factory set, low priority |
+| ~~**Noise gate** threshold~~ | ~~Find noise gate cmd~~ | **DONE 2026-07-06** — get=CMD 0x04 reg 0xa212; set=CMD 0x08 sub 0x12 (float dB); on/off=CMD 0x05 sel 0x29. Factory-locked; see PROTOCOL.md "Noise gate" |
  
 
 

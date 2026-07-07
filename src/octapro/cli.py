@@ -389,6 +389,36 @@ def write_solo(
     sys.exit(run_write_solo(channel=channel, solo=on, commit=commit, no_keepalive=no_keepalive))
 
 
+@write_app.command(name="noise-gate")
+def write_noise_gate(
+    action: Annotated[
+        str,
+        typer.Argument(help="get | set | on | off  (get=measure, set needs --db)."),
+    ],
+    db: Annotated[
+        float | None, typer.Option("--db", help="Threshold in dB (for `set`).")
+    ] = None,
+    commit: Annotated[
+        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
+    ] = False,
+    no_keepalive: _NoKA = False,
+    verbose: _Verbose = False,
+    quiet: _Quiet = False,
+    log_file: _LogFile = None,
+) -> None:
+    """Noise gate get/set/on/off. **FACTORY-LOCKED — the manual says not to
+    change it by hand.** **Dry-run unless `--commit`.**"""
+    _setup(verbose, quiet, log_file)
+    action = action.strip().lower()
+    if action not in ("get", "set", "on", "off"):
+        typer.echo("action must be one of: get, set, on, off", err=True)
+        raise typer.Exit(1)
+    from octapro.commands.write import run_write_noise_gate
+    sys.exit(
+        run_write_noise_gate(action=action, db=db, commit=commit, no_keepalive=no_keepalive)
+    )
+
+
 @write_app.command(name="preset-save")
 def write_preset_save(
     slot: Annotated[

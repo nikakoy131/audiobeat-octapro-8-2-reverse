@@ -352,6 +352,26 @@ class TestBuildMute:
         assert pkt[8] == compute_checksum(_zeroed_csum(pkt))
 
 
+class TestBuildNoiseGate:
+    """Noise gate get/set/on-off — live-captured 2026-07-06 (factory-locked)."""
+
+    def test_get_live_bytes(self):
+        from octapro.protocol.packet import build_noise_gate_get
+
+        assert bytes(build_noise_gate_get())[:9] == bytes.fromhex("e0a20400b00012a294")
+
+    def test_set_live_bytes(self):
+        from octapro.protocol.packet import build_noise_gate_set
+
+        assert bytes(build_noise_gate_set(-88.0))[:12] == bytes.fromhex("e0a20800b700120000b0c21b")
+
+    def test_onoff_live_bytes(self):
+        from octapro.protocol.packet import build_noise_gate_onoff
+
+        assert bytes(build_noise_gate_onoff(False))[:9] == bytes.fromhex("e0a20500b7002900c0")
+        assert bytes(build_noise_gate_onoff(True))[:9] == bytes.fromhex("e0a20500b7002901c1")
+
+
 class TestBuildPreset:
     """CMD 0x08 sub 0x06 preset save/recall — live-captured 2026-07-06.
     byte[7]=0x80|slot (save) or slot (recall); checksum (sum[4:11]-0x20) at [11];
