@@ -106,6 +106,53 @@ def parse_dat(
     sys.exit(run_parse_dat(path=path, channel=channel))
 
 
+@app.command(name="export-dat")
+def export_dat(
+    path: Annotated[Path, typer.Argument(help="Output .dat path to write.")],
+    no_keepalive: _NoKA = False,
+    verbose: _Verbose = False,
+    quiet: _Quiet = False,
+    log_file: _LogFile = None,
+) -> None:
+    """Read all 10 channels from the device and write a US002 .dat preset."""
+    _setup(verbose, quiet, log_file)
+    from octapro.commands.preset_io import run_export_dat
+    sys.exit(run_export_dat(path=path, no_keepalive=no_keepalive))
+
+
+@app.command(name="import-dat")
+def import_dat(
+    path: Annotated[Path, typer.Argument(help="Path to a .dat preset file (US002 format).")],
+    channel: Annotated[
+        int | None,
+        typer.Option("--channel", "-c", min=1, max=10, help="Import only channel N (1-10)."),
+    ] = None,
+    skip_flat_eq: Annotated[
+        bool, typer.Option("--skip-flat-eq", help="Skip EQ bands that are flat (0 dB, default Q).")
+    ] = False,
+    commit: Annotated[
+        bool, typer.Option("--commit", help="Actually send — without this, prints the plan only.")
+    ] = False,
+    no_keepalive: _NoKA = False,
+    verbose: _Verbose = False,
+    quiet: _Quiet = False,
+    log_file: _LogFile = None,
+) -> None:
+    """Apply a .dat preset to the device (gain, delay, HPF/LPF, speaker type, EQ;
+    routing excluded). **Dry-run unless `--commit`.**"""
+    _setup(verbose, quiet, log_file)
+    from octapro.commands.preset_io import run_import_dat
+    sys.exit(
+        run_import_dat(
+            path=path,
+            commit=commit,
+            channels=[channel] if channel else None,
+            include_flat_eq=not skip_flat_eq,
+            no_keepalive=no_keepalive,
+        )
+    )
+
+
 # ---------------------------------------------------------------------------
 # decode-pcap
 # ---------------------------------------------------------------------------
