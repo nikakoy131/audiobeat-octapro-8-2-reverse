@@ -72,7 +72,16 @@ class TestParseChannelBlock:
     def test_routing_parsed(self):
         raw = _build_block()
         block = parse_channel_block(raw, ch=1)
-        assert len(block.routing.values) == 32
+        # routing is 30 bytes; [30:34] onward is the gain float32 — reading 32
+        # here would misinterpret the low gain bytes as routing levels
+        assert len(block.routing.values) == 30
+
+    def test_routing_does_not_eat_gain(self):
+        # a distinctive gain must NOT leak into the routing values
+        raw = _build_block(gain_db=-10.0)
+        block = parse_channel_block(raw, ch=1)
+        assert block.gain_db == -10.0
+        assert len(block.routing.values) == 30
 
     def test_unknown_bytes_recorded(self):
         raw = _build_block()

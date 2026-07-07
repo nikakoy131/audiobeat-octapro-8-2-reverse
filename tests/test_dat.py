@@ -41,7 +41,7 @@ class TestParseDat:
     def test_routing_matrix_parsed(self, dat_path):
         preset = parse_dat(dat_path)
         for ch in preset.channels:
-            assert len(ch.routing.values) == 32
+            assert len(ch.routing.values) == 30  # [30:] is the gain float, not routing
 
     def test_invalid_file(self, tmp_path):
         from octapro.errors import ParseError
