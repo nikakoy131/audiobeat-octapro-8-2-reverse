@@ -256,19 +256,25 @@ Used in both the **USB channel readback** (CMD 0x05 response) and the **.dat pre
 
 ```
 [0]      prefix byte (0x00)
-[1:33]   routing matrix — 32 bytes (same as .dat [0:32])
-[33:39]  unknown (6 bytes, typically zeros)
+[1:31]   routing matrix — 30 bytes (device read-format; NOT the CMD 0x20 write)
+[31:35]  float32 LE  per-channel GAIN (dB)          ← decoded 2026-07-06
+[35:39]  float32 LE  per-channel DELAY (ms)         ← decoded 2026-07-06
 [39:43]  float32 LE  HPF frequency (Hz)
-[43]     HPF slope code  (0x05=36dB/oct, 0x03=12dB/oct)
-[44]     unknown (0x00)
+[43]     HPF slope code  (dB/oct = (code+1)*6)
+[44]     HPF filter type (0=LR, 1=Bessel, 2=Butterworth)
 [45:49]  float32 LE  LPF frequency (Hz)   20600.0 = bypass
-[49]     LPF slope code  (0x03 observed)
-[50:52]  unknown flags (2 bytes)
-[52]     EQ section marker (0x06)
+[49]     LPF slope code
+[50]     LPF filter type
+[51]     unknown (0x00)
+[52]     SPEAKER TYPE (1..6)  ← was mislabelled "EQ marker 0x06" (0x06=FF)
 [53:239] EQ data — 31 bands × 6 bytes each
 [239]    trailing byte (varies per channel)
 [240:242] padding zeros
 ```
+
+The hidden gain/delay/filter-type/speaker-type fields were verified 2026-07-06
+against an app `.dat` export with known CH1 values (gain −10.0, delay 2.5 ms,
+speaker type HF). The `.dat` block is this block shifted −1 (see below).
 
 ### .dat Preset File Format (US002)
 
@@ -283,23 +289,24 @@ Body:   10 × 238 bytes  (one block per channel, stride confirmed)
 ### .dat Channel Block (238 bytes)
 
 ```
-[0:32]   Routing matrix — 32 bytes
-         Each byte = signed int8 gain / 10.0 dB
-           0x80 = -inf (mute)     0x78 = 0.0 dB
-           0xe4 = -2.8 dB         0x64 = +10.0 dB
-           0xb2 = -7.8 dB
-
-[32:38]  unknown (6 bytes)
-[38:42]  float32  HPF frequency (Hz)     [USB: cd[39:43]]
+[0:30]   Routing matrix — 30 bytes (device read-format)   [USB: cd[1:31]]
+[30:34]  float32  per-channel GAIN (dB)                    [USB: cd[31:35]]
+[34:38]  float32  per-channel DELAY (ms)                   [USB: cd[35:39]]
+[38:42]  float32  HPF frequency (Hz)                       [USB: cd[39:43]]
 [42]     HPF slope code
-[43]     unknown
-[44:48]  float32  LPF frequency (Hz)   20600.0 = bypass  [USB: cd[45:49]]
+[43]     HPF filter type (0=LR, 1=Bessel, 2=Butterworth)
+[44:48]  float32  LPF frequency (Hz)   20600.0 = bypass    [USB: cd[45:49]]
 [48]     LPF slope code
-[49:52]  unknown flags
-
-[52]     EQ section marker (0x06)
-[52:238] EQ data — 31 bands × 6 bytes each  [USB: cd[53:239]]
+[49]     LPF filter type
+[50]     unknown (0x00)
+[51]     SPEAKER TYPE (1..6 = HF/MF/LF/MHF/MLF/FF)
+[52:238] EQ data — 31 bands × 6 bytes each                 [USB: cd[53:239]]
 ```
+
+So `.dat block = device block [1:239]`. `import-dat` pushes gain/delay/HPF/LPF/
+speaker-type/EQ via the write commands (routing excluded — its read-format does
+not map to the CMD 0x20 write); `export-dat` reads the 10 device blocks and
+writes `US002 + 10×[1:239] + 00 00`.
 
 ### EQ Band structure (6 bytes × 31 bands)
 

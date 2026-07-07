@@ -157,6 +157,8 @@ octaproctl read knob-vol                              remote-knob volume (keepal
 octaproctl dump channel <N> [--annotate]              hex dump raw channel block
 octaproctl monitor [--interval 0.5]                   live poll + diff highlight
 octaproctl parse-dat <file> [--channel N]             offline .dat preset decode
+octaproctl export-dat <file>                          read device → write US002 .dat preset
+octaproctl import-dat <file> [-c N] [--skip-flat-eq] [--commit]   apply .dat preset to device
 octaproctl decode-pcap <file> [--out jsonl]           offline pcapng decode (needs tshark)
 octaproctl probe <hex> [--commit]                     send raw packet
 octaproctl write hpf --channel N --freq Hz [--slope-db D] [--type T] [--commit]
@@ -272,6 +274,5 @@ GitHub Actions (`release.yml`) builds a wheel + sdist and attaches them to the R
 - [x] **Input Routing Matrix** (`write routing`) — CMD `0x20`, per-output 14-input row, value=`0x80`+%, all CH1-10 (2026-07-06).
 - [x] **Preset Save & Recall** (`write preset-save` / `write preset-recall`) — CMD `0x08` sub `0x06`, slots M1-M6 (2026-07-06).
 - [x] **Noise Gate** (`write noise-gate get|set|on|off`) — CMD 0x04 reg `0xa212` / CMD 0x08 sub `0x12` / CMD 0x05 sel `0x29`; factory-locked (2026-07-06).
-- [ ] **Global Configuration:**
-  - Support exporting/applying presets directly from `.dat` configuration files.
+- [x] **`.dat` Import / Export** (`import-dat` / `export-dat`) — full US002 round-trip: gain, delay, HPF/LPF (freq/slope/type), speaker type, 31-band EQ (routing excluded — read-format only). Hidden block fields (gain/delay/filter type/speaker type) decoded 2026-07-06.
 
