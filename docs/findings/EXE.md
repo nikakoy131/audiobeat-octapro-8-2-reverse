@@ -1,4 +1,4 @@
-# FINDINGS_EXE.md — Static Analysis of Audiobeat OctaPro 8.2 V1.0.7_250801.exe
+# Static Analysis of Audiobeat OctaPro 8.2 V1.0.7_250801.exe
 
 ## File Info
 

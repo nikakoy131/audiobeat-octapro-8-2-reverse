@@ -10,7 +10,7 @@ control requests (no device state changed). Raw bytes saved alongside this doc:
 
 Why this matters: a virtual-amplifier shim (e.g. Linux `/dev/uhid`) must present
 **exactly** this report descriptor and VID/PID so the vendor app enumerates the
-fake device the same way it does the real one. See PROTOCOL.md and FINDINGS_EXE.md
+fake device the same way it does the real one. See PROTOCOL.md and findings/EXE.md
 for the "capture the Main-volume write" plan.
 
 ---
