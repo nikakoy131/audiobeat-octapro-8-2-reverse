@@ -34,8 +34,13 @@ def run_parse_dat(path: Path, channel: int | None = None) -> int:
             log.error("Channel %d not found in preset", channel)
             return 1
 
+    from octapro.protocol.constants import SPEAKER_TYPE_NAMES
+
     table = Table(title=f"Preset: {path.name}", box=box.SIMPLE_HEAD)
     table.add_column("CH", style="bold", width=3)
+    table.add_column("Gain dB", width=8, justify="right")
+    table.add_column("Delay ms", width=8, justify="right")
+    table.add_column("Speaker", width=8)
     table.add_column("HPF Hz", width=9)
     table.add_column("HPF slope", width=11)
     table.add_column("LPF Hz", width=9)
@@ -47,8 +52,12 @@ def run_parse_dat(path: Path, channel: int | None = None) -> int:
         eq_str = f"{len(active)} band(s)" if active else "flat"
         lpf_str = "bypass" if abs(ch.lpf_freq_hz - LPF_BYPASS_HZ) < 100 else f"{ch.lpf_freq_hz:.1f}"
         hpf_str = f"{ch.hpf_freq_hz:.1f}" if ch.hpf_freq_hz > 10 else f"~{ch.hpf_freq_hz:.1f} (?)"
+        spk = SPEAKER_TYPE_NAMES.get(ch.speaker_type_byte, f"0x{ch.speaker_type_byte:02x}")
         table.add_row(
             str(ch.index),
+            f"{ch.gain_db:+.1f}",
+            f"{ch.delay_ms:.2f}",
+            spk.split()[0],  # short code (HF/MF/…)
             hpf_str,
             _SLOPE_NAMES.get(ch.hpf_slope_byte, f"0x{ch.hpf_slope_byte:02x}"),
             lpf_str,
