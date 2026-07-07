@@ -406,6 +406,30 @@ class UhidShim:
             who = "ALL channels" if payload[7] == 0xFF else f"CH{payload[7]}"
             return f"{who} EQ RESET (CMD 0x05 sub 0x07 @ master addr)"
         if (
+            len(payload) >= 11
+            and payload[2] == 0x08
+            and payload[4:6] == MASTER_VOLUME_ADDR
+            and payload[6] == 0x12
+        ):
+            db = struct.unpack_from("<f", payload, 7)[0]
+            return f"NOISE GATE SET -> {db:+.1f} dB (CMD 0x08 sub 0x12)"
+        if (
+            len(payload) >= 8
+            and payload[2] == 0x05
+            and payload[4:6] == MASTER_VOLUME_ADDR
+            and payload[6] == 0x29
+            and payload[7] in (0x00, 0x01)
+        ):
+            return f"NOISE GATE {'ON' if payload[7] else 'OFF'} (CMD 0x05 sub 0x29)"
+        if (
+            len(payload) >= 8
+            and payload[2] == 0x04
+            and payload[4] == 0xB0
+            and payload[6] == 0x12
+            and payload[7] == 0xA2
+        ):
+            return "NOISE GATE GET (CMD 0x04 reg 0xa212)"
+        if (
             len(payload) >= 8
             and payload[2] == 0x08
             and payload[4:6] == MASTER_VOLUME_ADDR
