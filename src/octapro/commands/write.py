@@ -161,6 +161,63 @@ def run_write_mute(
     return 0
 
 
+def run_write_noise_gate(
+    action: str,               # "get" | "set" | "on" | "off"
+    db: float | None,
+    commit: bool,
+    no_keepalive: bool = False,
+) -> int:
+    """Noise gate get / set / on / off (FACTORY-LOCKED per the manual).
+
+    action="get" triggers a floor measurement (CMD 0x04 reg 0xa212); "set"
+    writes a float32 dB threshold (CMD 0x08 sub 0x12); "on"/"off" toggle the
+    gate (CMD 0x05 sel 0x29). Live-verified 2026-07-06.
+    """
+    from octapro.protocol.packet import (
+        build_noise_gate_get,
+        build_noise_gate_onoff,
+        build_noise_gate_set,
+    )
+
+    if action == "get":
+        pkt = build_noise_gate_get()
+        intent = "NOISE GATE GET (trigger floor measurement)"
+    elif action == "set":
+        if db is None:
+            log.error("noise-gate set needs --db <threshold>")
+            return 1
+        pkt = build_noise_gate_set(db)
+        intent = f"NOISE GATE SET → {db:+.1f} dB"
+    elif action in ("on", "off"):
+        pkt = build_noise_gate_onoff(action == "on")
+        intent = f"NOISE GATE {action.upper()}"
+    else:
+        log.error("unknown noise-gate action %r", action)
+        return 1
+
+    log.warning("Noise gate is factory-set; the manual says not to change it by hand.")
+
+    if not commit:
+        _dry_run_print(intent, bytes(pkt))
+        return 0
+
+    from octapro.logging import log_packet_in, log_packet_out
+    from octapro.transport.hid import HidTransport
+
+    try:
+        with HidTransport() as t:
+            if not no_keepalive:
+                t.start_keepalive()
+            log_packet_out(pkt[2], int.from_bytes(pkt[4:6], "little"), pkt[6], bytes(pkt))
+            resp = t.transact(bytes(pkt))
+            log_packet_in(resp)
+            log.info("Written: %s", intent)
+    except Exception as exc:
+        log.error("Write failed: %s", exc)
+        return 1
+    return 0
+
+
 def run_write_preset(
     slot: int,
     save: bool,

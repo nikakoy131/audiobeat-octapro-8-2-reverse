@@ -21,11 +21,13 @@ from octapro.protocol.constants import (
     KNOWN_STATUSES,
     MUTE_OFF,
     MUTE_ON,
+    NOISE_GATE_GET_CSUM,
     NUM_CHANNELS,
     PRESET_SAVE_FLAG,
     PRESET_SLOT_MAX,
     PRESET_SLOT_MIN,
     REG_KEEPALIVE,
+    REG_NOISE_GATE,
     ROUTING_INPUT_BYTES,
     ROUTING_INPUT_NAMES,
     ROUTING_LEVEL_BASE,
@@ -44,6 +46,8 @@ from octapro.protocol.constants import (
     SUB_MASTER_VOLUME,
     SUB_MUTE_CHANNEL,
     SUB_MUTE_MASTER,
+    SUB_NOISE_GATE_ONOFF,
+    SUB_NOISE_GATE_SET,
     SUB_PHASE,
     SUB_PRESET,
     SUB_SESSION_OPEN,
@@ -423,6 +427,40 @@ def build_source_high(code: int) -> bytearray:
     if not 0 <= code <= 1:
         raise ValueError(f"high-source code must be 0 (BT) or 1 (USB disk), got {code}")
     return _build_source_select(SUB_SOURCE_HIGH, code)
+
+
+def build_noise_gate_get() -> bytearray:
+    """CMD 0x04 WRITE_PARAM reg 0xa212 — trigger a noise-floor measurement.
+
+    Live-captured 2026-07-06: e0 a2 04 00 b0 00 12 a2 94. A bare register write
+    (magic checksum 0x94, like the keepalive/firmware regs) that tells the
+    device to re-measure the current floor; the value comes back on the read
+    side (also visible in the CH0 master block [27:31]). FACTORY-LOCKED.
+    """
+    return build_write_param(0x00B0, REG_NOISE_GATE, csum=NOISE_GATE_GET_CSUM)
+
+
+def build_noise_gate_set(threshold_db: float) -> bytearray:
+    """CMD 0x08 sub 0x12 — set the noise-gate threshold (float32 dB).
+
+    Live-captured 2026-07-06: e0 a2 08 00 b7 00 12 00 00 b0 c2 1b (-88.0 dB).
+    Same float-write family as master volume, just sub-byte 0x12. FACTORY-LOCKED
+    — the manual says not to change this by hand.
+    """
+    return _build_volume_write(SESSION_OPEN_ADDR, SUB_NOISE_GATE_SET, threshold_db)
+
+
+def build_noise_gate_onoff(on: bool) -> bytearray:
+    """CMD 0x05 selector 0x29 @ global addr — enable/disable the noise gate.
+
+    Live-captured 2026-07-06 (off): e0 a2 05 00 b7 00 29 00 c0. byte[7]=1 on /
+    0 off; universal checksum at [8].
+    """
+    pkt = _base_packet(CMD_READ_BLOCK, SESSION_OPEN_ADDR, 0)
+    pkt[6] = SUB_NOISE_GATE_ONOFF
+    pkt[7] = MUTE_ON if on else MUTE_OFF
+    pkt[8] = compute_checksum(pkt)
+    return pkt
 
 
 def _build_preset(slot: int, save: bool) -> bytearray:
