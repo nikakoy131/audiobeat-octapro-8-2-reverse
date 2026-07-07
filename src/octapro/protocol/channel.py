@@ -71,10 +71,15 @@ class ChannelBlock:
     channel: int
     raw: bytes
     routing: RoutingMatrix
+    gain_db: float
+    delay_ms: float
     hpf_freq_hz: float
     hpf_slope_byte: int
+    hpf_type_byte: int
     lpf_freq_hz: float
     lpf_slope_byte: int
+    lpf_type_byte: int
+    speaker_type_byte: int
     eq_bands: list[EqBand]
     # Bytes not yet understood — logged for research
     unknown_bytes: dict[str, str] = field(default_factory=dict)
@@ -88,17 +93,21 @@ def parse_channel_block(
     """
     Parse 242-byte channel data payload (bytes [8:] of an IN packet).
 
-    Block layout (PROTOCOL.md):
+    Block layout (= .dat block shifted +1; hidden fields decoded & verified
+    2026-07-06 against an app export with known CH1 gain/delay/speaker type):
       [0]       prefix 0x00
-      [1:33]    routing matrix (32 bytes)
-      [33:39]   UNKNOWN (6 bytes)
+      [1:31]    routing matrix (30 bytes, device read-format)
+      [31:35]   float32 LE per-channel GAIN (dB)
+      [35:39]   float32 LE per-channel DELAY (ms)
       [39:43]   float32 LE HPF freq (Hz)
       [43]      HPF slope code
-      [44]      UNKNOWN byte
+      [44]      HPF filter type (0=LR, 1=Bessel, 2=Butterworth)
       [45:49]   float32 LE LPF freq (Hz)
       [49]      LPF slope code
-      [50:52]   UNKNOWN flags (2 bytes)
-      [52]      EQ section marker 0x06
+      [50]      LPF filter type
+      [51]      UNKNOWN byte (observed 0x00)
+      [52]      SPEAKER TYPE (1..6) — earlier mislabelled an "EQ marker 0x06"
+                because every prior sample happened to be 0x06 (FF)
       [53:239]  EQ data: 31 bands × 6 bytes
       [239]     trailing byte (varies per channel)
       [240:242] padding zeros
@@ -118,27 +127,26 @@ def parse_channel_block(
 
     routing = parse_routing(raw, offset=1)
 
+    gain_db = _f32(31)
+    delay_ms = _f32(35)
     hpf_freq = _f32(39)
     hpf_slope = _u8(43)
     if hpf_slope not in KNOWN_SLOPES and warn:
         warn("hpf_slope_code", f"0x{hpf_slope:02x}", f"ch={ch}")
+    hpf_type = _u8(44)
 
     lpf_freq = _f32(45)
     lpf_slope = _u8(49)
     if lpf_slope not in KNOWN_SLOPES and warn:
         warn("lpf_slope_code", f"0x{lpf_slope:02x}", f"ch={ch}")
+    lpf_type = _u8(50)
 
-    eq_marker = _u8(52)
-    if eq_marker != 0x06 and warn:
-        warn("eq_marker", f"0x{eq_marker:02x}", f"ch={ch} expected 0x06")
+    speaker_type = _u8(52)
 
     eq_bands = parse_eq_block(raw, offset=EQ_BLOCK_OFFSET, warn=warn)
 
     unknowns: dict[str, str] = {
-        "bytes_33_39": raw[33:39].hex() if len(raw) >= 39 else "",
-        "byte_44": f"0x{_u8(44):02x}",
-        "flags_50_52": raw[50:52].hex() if len(raw) >= 52 else "",
-        "eq_marker": f"0x{eq_marker:02x}",
+        "byte_51": f"0x{_u8(51):02x}",
         "trailing_239": f"0x{_u8(239):02x}",
         "padding_240_242": raw[240:242].hex() if len(raw) >= 242 else "",
     }
@@ -147,10 +155,15 @@ def parse_channel_block(
         channel=ch,
         raw=raw,
         routing=routing,
+        gain_db=gain_db,
+        delay_ms=delay_ms,
         hpf_freq_hz=hpf_freq,
         hpf_slope_byte=hpf_slope,
+        hpf_type_byte=hpf_type,
         lpf_freq_hz=lpf_freq,
         lpf_slope_byte=lpf_slope,
+        lpf_type_byte=lpf_type,
+        speaker_type_byte=speaker_type,
         eq_bands=eq_bands,
         unknown_bytes=unknowns,
     )

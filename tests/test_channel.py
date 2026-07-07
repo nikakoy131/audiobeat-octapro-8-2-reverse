@@ -8,15 +8,20 @@ def _build_block(
     hpf_slope: int = 0x05,
     lpf_hz: float = 3500.0,
     lpf_slope: int = 0x03,
+    gain_db: float = -6.0,
+    delay_ms: float = 1.5,
+    speaker_type: int = 0x06,
 ) -> bytes:
     data = bytearray(BLOCK_LEN)
     data[0] = 0x00  # prefix
-    # routing [1:33] — zeros (all muted)
+    # routing [1:31] — zeros (all muted)
+    struct.pack_into("<f", data, 31, gain_db)
+    struct.pack_into("<f", data, 35, delay_ms)
     struct.pack_into("<f", data, 39, hpf_hz)
     data[43] = hpf_slope
     struct.pack_into("<f", data, 45, lpf_hz)
     data[49] = lpf_slope
-    data[52] = 0x06  # EQ marker
+    data[52] = speaker_type
     for i in range(31):
         off = 53 + i * 6
         struct.pack_into("<f", data, off, 1000.0)
@@ -72,7 +77,14 @@ class TestParseChannelBlock:
     def test_unknown_bytes_recorded(self):
         raw = _build_block()
         block = parse_channel_block(raw, ch=1)
-        assert "bytes_33_39" in block.unknown_bytes
+        assert "byte_51" in block.unknown_bytes
+
+    def test_gain_delay_speaker_decoded(self):
+        raw = _build_block(gain_db=-10.0, delay_ms=2.5, speaker_type=0x01)
+        block = parse_channel_block(raw, ch=1)
+        assert block.gain_db == -10.0
+        assert block.delay_ms == 2.5
+        assert block.speaker_type_byte == 0x01
 
 
 class TestParseMasterBlock:
