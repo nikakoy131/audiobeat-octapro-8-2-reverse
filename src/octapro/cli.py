@@ -620,7 +620,12 @@ def write_eq_pass(
 
 @write_app.command(name="eq-reset")
 def write_eq_reset(
-    channel: Annotated[int, typer.Option("--channel", "-c", min=1, max=10, help="Channel 1-10.")],
+    channel: Annotated[
+        int, typer.Option("--channel", "-c", min=0, max=10, help="Channel 1-10 (omit with --all).")
+    ] = 0,
+    all_channels: Annotated[
+        bool, typer.Option("--all", help="Reset EQ on ALL channels (the RST 'All' option).")
+    ] = False,
     commit: Annotated[
         bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
     ] = False,
@@ -629,10 +634,19 @@ def write_eq_reset(
     quiet: _Quiet = False,
     log_file: _LogFile = None,
 ) -> None:
-    """Reset (flatten) a channel's EQ (CMD 0x05, the RST button). **Dry-run unless `--commit`.**"""
+    """Reset (flatten) a channel's EQ, or all channels with --all (CMD 0x05, RST
+    button). **Dry-run unless `--commit`.**"""
     _setup(verbose, quiet, log_file)
     from octapro.commands.write import run_write_eq_reset
-    sys.exit(run_write_eq_reset(channel=channel, commit=commit, no_keepalive=no_keepalive))
+    from octapro.protocol.constants import EQ_RESET_ALL
+    if all_channels:
+        target = EQ_RESET_ALL
+    elif 1 <= channel <= 10:
+        target = channel
+    else:
+        typer.echo("specify --channel 1-10 or --all", err=True)
+        raise typer.Exit(1)
+    sys.exit(run_write_eq_reset(channel=target, commit=commit, no_keepalive=no_keepalive))
 
 
 @write_app.command(name="phase")
