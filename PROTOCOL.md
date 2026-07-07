@@ -606,12 +606,15 @@ the address: RST uses the **fixed master address `0x00b7`** and puts the
 ```
 reset ch7: e0 a2 05 00 b7 00 07 07 a5
 reset ch3: e0 a2 05 00 b7 00 07 03 a1
+reset ALL: e0 a2 05 00 b7 00 07 ff 9d   (byte[7] = 0xff)
 ```
 
 The device flattens the band gains itself (no 31-band write burst). Confirmed
-on two channels (byte[7] = 0x07, 0x03). Builder `packet.build_eq_reset(ch)`;
-CLI `write eq-reset --channel N`. This is the "reset **current** channel"
-action — the app's "reset **all**" dialog option was not captured.
+on two channels (byte[7] = 0x07, 0x03) plus the **"reset all"** dialog option,
+which is the same packet with **byte[7] = `0xff`** (all-channels sentinel;
+`constants.EQ_RESET_ALL`) — live-captured 2026-07-06. Builder
+`packet.build_eq_reset(ch)` (ch = 1..10 or `EQ_RESET_ALL`); CLI `write eq-reset
+--channel N` or `write eq-reset --all`.
 
 So selector `0x07` means two things by address: at `0xNNb7` → EQ pass toggle
 (byte[7]=bool); at `0x00b7` → reset channel byte[7]'s EQ.
