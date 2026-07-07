@@ -389,6 +389,45 @@ def write_solo(
     sys.exit(run_write_solo(channel=channel, solo=on, commit=commit, no_keepalive=no_keepalive))
 
 
+@write_app.command(name="preset-save")
+def write_preset_save(
+    slot: Annotated[
+        int, typer.Option("--slot", "-s", min=1, max=6, help="Preset slot M1-M6.")
+    ],
+    commit: Annotated[
+        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
+    ] = False,
+    no_keepalive: _NoKA = False,
+    verbose: _Verbose = False,
+    quiet: _Quiet = False,
+    log_file: _LogFile = None,
+) -> None:
+    """Save current settings to a preset slot (M1-M6) — **overwrites it**.
+    **Dry-run unless `--commit`.**"""
+    _setup(verbose, quiet, log_file)
+    from octapro.commands.write import run_write_preset
+    sys.exit(run_write_preset(slot=slot, save=True, commit=commit, no_keepalive=no_keepalive))
+
+
+@write_app.command(name="preset-recall")
+def write_preset_recall(
+    slot: Annotated[
+        int, typer.Option("--slot", "-s", min=1, max=6, help="Preset slot M1-M6.")
+    ],
+    commit: Annotated[
+        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
+    ] = False,
+    no_keepalive: _NoKA = False,
+    verbose: _Verbose = False,
+    quiet: _Quiet = False,
+    log_file: _LogFile = None,
+) -> None:
+    """Recall (load) a preset slot (M1-M6) onto the device. **Dry-run unless `--commit`.**"""
+    _setup(verbose, quiet, log_file)
+    from octapro.commands.write import run_write_preset
+    sys.exit(run_write_preset(slot=slot, save=False, commit=commit, no_keepalive=no_keepalive))
+
+
 @write_app.command(name="routing")
 def write_routing(
     output: Annotated[

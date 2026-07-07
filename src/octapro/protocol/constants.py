@@ -39,6 +39,22 @@ SUB_CHANNEL_GAIN: Final = 0x03
 # to ms before sending.
 SUB_CHANNEL_DELAY: Final = 0x04
 
+# CMD 0x08 sub 0x06 — preset SAVE / RECALL (slots M1..M6), live-captured
+# 2026-07-06 via the uhid shim. addr 0x00b7 (global). This is the "0x06
+# sub-family" the older notes flagged as unidentified. byte[7] encodes both the
+# operation and the slot:
+#   save:   0x80 | slot   (M1..M6 -> 0x81..0x86)
+#   recall: slot           (M1..M6 -> 0x01..0x06)
+# byte[8:11] are stale buffer bytes (ignored by the device; the builder zeros
+# them). Checksum at [11] = (sum(pkt[4:11]) - 0x20) & 0xFF. byte[12] trailer =
+# 0x80 (save) / 0x00 (recall). On recall the app also emits a 0x1c walking-bit
+# refresh and re-reads every channel, but the device applies the preset on this
+# single packet. Verified byte-perfect: saves M1/M2/M5/M6, recalls M3/M5.
+SUB_PRESET: Final = 0x06
+PRESET_SAVE_FLAG: Final = 0x80
+PRESET_SLOT_MIN: Final = 1
+PRESET_SLOT_MAX: Final = 6
+
 # CMD 0x05 mute toggle, live-captured 2026-07-06 via the uhid shim
 # (docs/LINUX_UHID_SHIM_PLAN.md). byte[7]=state (1=mute, 0=unmute); addr
 # picks the target (0x00b7=master, 0xNNb7=channel N). Master and per-channel

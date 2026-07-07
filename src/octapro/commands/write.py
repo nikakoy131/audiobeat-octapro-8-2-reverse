@@ -161,6 +161,52 @@ def run_write_mute(
     return 0
 
 
+def run_write_preset(
+    slot: int,
+    save: bool,
+    commit: bool,
+    no_keepalive: bool = False,
+) -> int:
+    """Preset save / recall (CMD 0x08 sub 0x06), slots M1..M6.
+
+    save=True overwrites slot `slot` with the current settings; save=False
+    recalls (loads) it. Live-verified 2026-07-06.
+    """
+    from octapro.logging import log_packet_in, log_packet_out
+    from octapro.protocol.constants import SESSION_OPEN_ADDR, SUB_PRESET
+    from octapro.protocol.packet import build_preset_recall, build_preset_save
+
+    try:
+        pkt = build_preset_save(slot) if save else build_preset_recall(slot)
+    except ValueError as exc:
+        log.error("%s", exc)
+        return 1
+
+    action = "SAVE →" if save else "RECALL"
+    intent = f"PRESET {action} M{slot}"
+    if save:
+        intent += "  (overwrites the slot)"
+
+    if not commit:
+        _dry_run_print(intent, bytes(pkt))
+        return 0
+
+    from octapro.transport.hid import HidTransport
+
+    try:
+        with HidTransport() as t:
+            if not no_keepalive:
+                t.start_keepalive()
+            log_packet_out(0x08, SESSION_OPEN_ADDR, SUB_PRESET, bytes(pkt))
+            resp = t.transact(bytes(pkt))
+            log_packet_in(resp)
+            log.info("Written: %s", intent)
+    except Exception as exc:
+        log.error("Write failed: %s", exc)
+        return 1
+    return 0
+
+
 def run_write_routing(
     output_ch: int,
     levels: list[int],

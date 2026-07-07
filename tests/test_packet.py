@@ -8,6 +8,8 @@ from octapro.protocol.packet import (
     build_dsp_commit,
     build_mute,
     build_phase,
+    build_preset_recall,
+    build_preset_save,
     build_read_channel,
     build_routing_row,
     build_source_high,
@@ -348,6 +350,35 @@ class TestBuildMute:
         assert struct.unpack_from("<H", pkt, 4)[0] == channel_addr(7)
         assert pkt[6] == 0x01  # per-channel sub-byte, NOT the master's 0x0d
         assert pkt[8] == compute_checksum(_zeroed_csum(pkt))
+
+
+class TestBuildPreset:
+    """CMD 0x08 sub 0x06 preset save/recall — live-captured 2026-07-06.
+    byte[7]=0x80|slot (save) or slot (recall); checksum (sum[4:11]-0x20) at [11];
+    byte[12]=0x80 (save)/0x00 (recall). Byte-perfect vs app packets."""
+
+    def test_save_live_bytes(self):
+        assert bytes(build_preset_save(2))[:13] == bytes.fromhex("e0a20800b70006820000001f80")
+        assert bytes(build_preset_save(6))[:13] == bytes.fromhex("e0a20800b7000686000000 2380")
+
+    def test_recall_live_bytes(self):
+        assert bytes(build_preset_recall(5))[:13] == bytes.fromhex("e0a20800b7000605000000 a200")
+
+    def test_save_sets_high_bit_recall_does_not(self):
+        for s in range(1, 7):
+            assert bytes(build_preset_save(s))[7] == 0x80 | s
+            assert bytes(build_preset_recall(s))[7] == s
+
+    def test_trailer_marks_save_vs_recall(self):
+        assert build_preset_save(1)[12] == 0x80
+        assert build_preset_recall(1)[12] == 0x00
+
+    def test_rejects_bad_slot(self):
+        for bad in (0, 7):
+            with pytest.raises(ValueError):
+                build_preset_save(bad)
+            with pytest.raises(ValueError):
+                build_preset_recall(bad)
 
 
 class TestBuildRoutingRow:
