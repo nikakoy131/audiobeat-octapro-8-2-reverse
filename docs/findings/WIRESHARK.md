@@ -1,4 +1,4 @@
-# FINDINGS_WIRESHARK.md — USB Traffic Analysis
+# Wireshark USB Traffic Analysis
 
 ## Captures
 

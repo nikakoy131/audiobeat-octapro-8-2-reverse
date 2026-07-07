@@ -2,6 +2,26 @@
 
 All notable changes to `octaproctl` and the reverse-engineering research for the Audiobeat OctaPro 8.2 / SP601 are documented here.
 
+## [Unreleased]
+
+### Changed
+- **Breaking CLI restructure**: unified file (`parse-dat`/`import-dat`/`export-dat`) and
+  device-slot (`write preset-save`/`write preset-recall`) presets into one `preset` group
+  (`preset show/import/export/save/recall`); flattened `dump channel N` → `dump N`; merged
+  `write source-high`/`write source-low` into `write source --tier high|low --to <name>`.
+- Root `--help` no longer calls the tool "Read-only" — it has 19+ write commands.
+- Deduplicated the 21 repeated inline `--commit` option definitions into a shared CLI type.
+- Moved research journals (`FINDINGS_*.md` → `docs/findings/*.md`) and `CONTEXT_USER.md`
+  (→ `docs/context_user.md`) out of the repo root; relabeled the latter's fully-completed
+  "Still to Capture" list as a capture log.
+
+### Fixed
+- `parse_routing` read 32 bytes instead of 30, misreading the first 2 bytes of the
+  per-channel gain float32 as bogus routing levels — affected `read channel`, `parse-dat`,
+  and `monitor`.
+- `read channel` now surfaces the previously-decoded-but-hidden gain, delay, speaker type,
+  and HPF/LPF filter type; `dump --annotate` and `monitor`'s live diff updated to match.
+
 ## [0.2.0] — 2026-04-24
 
 ### Added

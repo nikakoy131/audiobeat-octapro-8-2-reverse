@@ -1,6 +1,6 @@
 # Original Companion Application Functionality: Audiobeat OctaPro 8.2 / Sennuopu HIFI-X12
 
-This document provides a comprehensive description of the user interface features and functional capabilities of the original companion software for the **Audiobeat OctaPro 8.2** (OEM: **Sennuopu HIFI-X12**). It is compiled from the official user manual ([docs/Sennuopu HIFI-X12 Manual EN V201120.pdf](file:///Users/ruslan_bielyi/Documents/demo/audiobeat-octapro-8-2-reverse/docs/Sennuopu%20HIFI-X12%20Manual%20EN%20V201120.pdf)) and static analysis of the Windows application ([Audiobeat OctaPro 8.2 V1.0.7_250801.exe](file:///Users/ruslan_bielyi/Documents/demo/audiobeat-octapro-8-2-reverse/FINDINGS_EXE.md)).
+This document provides a comprehensive description of the user interface features and functional capabilities of the original companion software for the **Audiobeat OctaPro 8.2** (OEM: **Sennuopu HIFI-X12**). It is compiled from the official user manual ([Sennuopu HIFI-X12 Manual EN V201120.pdf](Sennuopu%20HIFI-X12%20Manual%20EN%20V201120.pdf)) and static analysis of the Windows application ([Audiobeat OctaPro 8.2 V1.0.7_250801.exe](findings/EXE.md)).
 
 ---
 

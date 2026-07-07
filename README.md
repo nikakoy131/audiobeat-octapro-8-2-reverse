@@ -1,6 +1,6 @@
 # Audiobeat OctaPro 8.2 — Protocol Reverse Engineering + CLI
 
-This repository documents the ongoing efforts to reverse engineer the USB HID communication protocol for the **Audiobeat OctaPro 8.2** (and related SP601) Car DSP Amplifier, and provides a Python CLI tool (`octaproctl`) to interact with the device.
+This repository documents the fully reverse-engineered USB HID communication protocol for the **Audiobeat OctaPro 8.2** (and related SP601) Car DSP Amplifier, and provides a Python CLI tool (`octaproctl`) to read and write every device parameter: faders, EQ, crossovers, routing, presets, and more.
 
 ## Hardware Overview
 
@@ -28,7 +28,9 @@ The device uses **USB HID CONTROL** transfers (not interrupt) with 256-byte payl
 | `0x05` | channel-flag | `addr=0xNNb7`, byte[6]=selector — per-channel booleans: `0x01`=mute, `0x02`=phase, `0x0d`=master mute. |
 | `0x08` | float write | Master fader (sub `0x0c`), channel faders (sub `0x03`, dB), channel delay (sub `0x04`, ms) — float32 at `[7:11]`, applies immediately. |
 | `0x0a` | `WRITE_DSP` | Real-time DSP RAM writes (float32) — HPF, and 31-band EQ (sub-byte = band slot `0x08+band-1`, carries freq+gain+Q). |
+| `0x08` | preset save/recall | `addr=0x00b7 sub=0x06` — byte[7]=`0x80|slot` saves, `slot` recalls (M1-M6). |
 | `0x1c` | bridge | `addr=0x00b7 sub=0x28` — bridge CH7+CH8 (state in byte[19] bit `0x80`). |
+| `0x20` | routing | `addr=0x0Nb7` — one packet per output channel, full 14-input crosspoint row. |
 
 Commands for master volume, mute, phase, and bridge were captured 2026-07-05/06
 by impersonating the device with a Linux `uhid` shim (see
@@ -107,11 +109,11 @@ uv run octaproctl read master
 # Read knob-vol — the remote-panel knob volume (decoded from the keepalive echo)
 uv run octaproctl read knob-vol
 
-# Parse a .dat preset file — no device needed
-uv run octaproctl parse-dat dsp_m2.dat
+# Show a .dat preset file — no device needed
+uv run octaproctl preset show dsp_m2.dat
 
 # Hex-dump a channel block with field annotations
-uv run octaproctl dump channel 7 --annotate
+uv run octaproctl dump 7 --annotate
 
 # Live monitor — highlights parameter changes in real time
 uv run octaproctl monitor
@@ -154,11 +156,13 @@ octaproctl info                                       device firmware + info
 octaproctl read channel <N|all>                       decode live channel block(s)
 octaproctl read master                                decode master (CH0) block
 octaproctl read knob-vol                              remote-knob volume (keepalive echo)
-octaproctl dump channel <N> [--annotate]              hex dump raw channel block
+octaproctl dump <N> [--annotate]                      hex dump raw channel block
 octaproctl monitor [--interval 0.5]                   live poll + diff highlight
-octaproctl parse-dat <file> [--channel N]             offline .dat preset decode
-octaproctl export-dat <file>                          read device → write US002 .dat preset
-octaproctl import-dat <file> [-c N] [--skip-flat-eq] [--commit]   apply .dat preset to device
+octaproctl preset show <file> [--channel N]           offline .dat preset decode
+octaproctl preset export <file>                       read device → write US002 .dat preset
+octaproctl preset import <file> [-c N] [--skip-flat-eq] [--commit]   apply .dat preset to device
+octaproctl preset save --slot N [--commit]             save current settings to M1-M6 (overwrites)
+octaproctl preset recall --slot N [--commit]           recall/load preset M1-M6
 octaproctl decode-pcap <file> [--out jsonl]           offline pcapng decode (needs tshark)
 octaproctl probe <hex> [--commit]                     send raw packet
 octaproctl write hpf --channel N --freq Hz [--slope-db D] [--type T] [--commit]
@@ -172,11 +176,8 @@ octaproctl write master --db F [--commit]             master (Main) volume, CMD 
 octaproctl write mute --channel N --on|--off [--commit]     N=0 = master mute
 octaproctl write solo --channel N --on|--off [--commit]     mutes all other channels (macro)
 octaproctl write speaker-type --channel N --type hf|mf|lf|mhf|mlf|ff [--commit]
-octaproctl write source-high --to bt|usb-disk [--commit]                high-priority source
-octaproctl write source-low --to high-level|low-level|opt|usb-audio [--commit]   normal source
+octaproctl write source --tier high|low --to <name> [--commit]   tier high: bt/usb-disk; low: high-level/low-level/opt/usb-audio
 octaproctl write routing --output N --levels "p1,...,p14" [--commit]    full 14-input routing row
-octaproctl write preset-save --slot N [--commit]        save current settings to M1-M6 (overwrites)
-octaproctl write preset-recall --slot N [--commit]      recall/load preset M1-M6
 octaproctl write noise-gate get|set --db X|on|off [--commit]   noise gate (FACTORY-LOCKED)
 octaproctl write phase --channel N --invert|--normal [--commit]
 octaproctl write bridge --on|--off [--commit]         CH7+CH8 bridge
@@ -231,10 +232,11 @@ GitHub Actions (`release.yml`) builds a wheel + sdist and attaches them to the R
 | File | Purpose |
 |---|---|
 | [`PROTOCOL.md`](PROTOCOL.md) | Full protocol reference — packet layout, checksum, commands, channel block format, Python reference client |
-| [`CONTEXT_USER.md`](CONTEXT_USER.md) | Device feature inventory and priority-ordered "Still to Capture" list |
-| [`FINDINGS_DAT.md`](FINDINGS_DAT.md) | Analysis of `dsp_m2.dat` (US002 preset format) |
-| [`FINDINGS_EXE.md`](FINDINGS_EXE.md) | Analysis of the vendor Windows EXE (Qt/HID class structure) |
-| [`FINDINGS_WIRESHARK.md`](FINDINGS_WIRESHARK.md) | Analysis of `usb1.pcapng` and `usb2.pcapng` |
+| [`docs/context_user.md`](docs/context_user.md) | Device feature inventory and capture log (complete — all parameters reverse-engineered) |
+| [`docs/findings/DAT.md`](docs/findings/DAT.md) | Analysis of `dsp_m2.dat` (US002 preset format) |
+| [`docs/findings/EXE.md`](docs/findings/EXE.md) | Analysis of the vendor Windows EXE (Qt/HID class structure) |
+| [`docs/findings/WIRESHARK.md`](docs/findings/WIRESHARK.md) | Analysis of `usb1.pcapng` and `usb2.pcapng` |
+| [`docs/findings/MANUAL_GAP.md`](docs/findings/MANUAL_GAP.md) | Gap analysis of the HIFI-X12 manual vs. reverse-engineered protocol |
 | [`docs/LINUX_UHID_SHIM_PLAN.md`](docs/LINUX_UHID_SHIM_PLAN.md) | The `uhid` virtual-amplifier capture rig (how the write commands were found) |
 | [`docs/HID_DESCRIPTORS.md`](docs/HID_DESCRIPTORS.md) | Live-dumped USB config + interface-4 HID report descriptors |
 
@@ -268,11 +270,9 @@ GitHub Actions (`release.yml`) builds a wheel + sdist and attaches them to the R
 
 ### Planned Features & Roadblocks
 - [x] **Speaker Type** (`write speaker-type`) — CMD `0x05` selector `0x30`, 1..6 enum (2026-07-06).
-- [ ] **Channel Tuning & Mixer Routing:**
-  - Implement writing/applying the **Input Routing Matrix** levels (0–100% mix).
-- [x] **Input Source Switching** (`write source-high` / `write source-low`) — CMD `0x05` @ `0x00b7`, two registers (2026-07-06).
+- [x] **Input Source Switching** (`write source --tier high|low`) — CMD `0x05` @ `0x00b7`, two registers (2026-07-06).
 - [x] **Input Routing Matrix** (`write routing`) — CMD `0x20`, per-output 14-input row, value=`0x80`+%, all CH1-10 (2026-07-06).
-- [x] **Preset Save & Recall** (`write preset-save` / `write preset-recall`) — CMD `0x08` sub `0x06`, slots M1-M6 (2026-07-06).
+- [x] **Preset Save & Recall** (`preset save` / `preset recall`) — CMD `0x08` sub `0x06`, slots M1-M6 (2026-07-06).
 - [x] **Noise Gate** (`write noise-gate get|set|on|off`) — CMD 0x04 reg `0xa212` / CMD 0x08 sub `0x12` / CMD 0x05 sel `0x29`; factory-locked (2026-07-06).
-- [x] **`.dat` Import / Export** (`import-dat` / `export-dat`) — full US002 round-trip: gain, delay, HPF/LPF (freq/slope/type), speaker type, 31-band EQ (routing excluded — read-format only). Hidden block fields (gain/delay/filter type/speaker type) decoded 2026-07-06.
+- [x] **`.dat` Import / Export** (`preset import` / `preset export`) — full US002 round-trip: gain, delay, HPF/LPF (freq/slope/type), speaker type, 31-band EQ (routing excluded — read-format only). Hidden block fields (gain/delay/filter type/speaker type) decoded 2026-07-06.
 
