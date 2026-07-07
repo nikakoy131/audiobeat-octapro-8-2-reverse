@@ -21,6 +21,9 @@ from octapro.protocol.constants import (
     MUTE_OFF,
     MUTE_ON,
     NUM_CHANNELS,
+    PRESET_SAVE_FLAG,
+    PRESET_SLOT_MAX,
+    PRESET_SLOT_MIN,
     REG_KEEPALIVE,
     ROUTING_INPUT_BYTES,
     ROUTING_INPUT_NAMES,
@@ -41,6 +44,7 @@ from octapro.protocol.constants import (
     SUB_MUTE_CHANNEL,
     SUB_MUTE_MASTER,
     SUB_PHASE,
+    SUB_PRESET,
     SUB_SESSION_OPEN,
     SUB_SOURCE_HIGH,
     SUB_SOURCE_LOW,
@@ -417,6 +421,43 @@ def build_source_high(code: int) -> bytearray:
     if not 0 <= code <= 1:
         raise ValueError(f"high-source code must be 0 (BT) or 1 (USB disk), got {code}")
     return _build_source_select(SUB_SOURCE_HIGH, code)
+
+
+def _build_preset(slot: int, save: bool) -> bytearray:
+    """CMD 0x08 sub 0x06 — preset save/recall (M1..M6). See constants.SUB_PRESET.
+
+    byte[7] = 0x80|slot (save) or slot (recall); checksum (sum(pkt[4:11])-0x20)
+    at [11]; byte[12] trailer = 0x80 (save) / 0x00 (recall). byte[8:11] left
+    zero (the app sends stale bytes there; the device ignores them).
+    """
+    if not PRESET_SLOT_MIN <= slot <= PRESET_SLOT_MAX:
+        raise ValueError(f"preset slot must be {PRESET_SLOT_MIN}..{PRESET_SLOT_MAX}, got {slot}")
+    byte7 = (PRESET_SAVE_FLAG | slot) if save else slot
+    pkt = _base_packet(0x08, SESSION_OPEN_ADDR, SUB_PRESET | (byte7 << 8))
+    pkt[11] = (sum(pkt[4:11]) - 0x20) & 0xFF
+    pkt[12] = PRESET_SAVE_FLAG if save else 0x00
+    return pkt
+
+
+def build_preset_save(slot: int) -> bytearray:
+    """CMD 0x08 sub 0x06 — SAVE current settings to preset slot `slot` (1..6).
+
+    Live-captured 2026-07-06 (byte-perfect M1/M2/M5/M6):
+        save M2: e0 a2 08 00 b7 00 06 82 00 00 00 1f 80
+    byte[7] = 0x80 | slot.
+    """
+    return _build_preset(slot, save=True)
+
+
+def build_preset_recall(slot: int) -> bytearray:
+    """CMD 0x08 sub 0x06 — RECALL (load) preset slot `slot` (1..6).
+
+    Live-captured 2026-07-06 (byte-perfect M5, M3 with app's stale bytes):
+        recall M5: e0 a2 08 00 b7 00 06 05 00 00 00 a2 00
+    byte[7] = slot (no 0x80 save bit). The device applies the preset on this
+    packet; the app additionally emits a 0x1c refresh and re-reads all channels.
+    """
+    return _build_preset(slot, save=False)
 
 
 def build_routing_row(output_ch: int, levels: list[int]) -> bytearray:
