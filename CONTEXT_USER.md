@@ -170,8 +170,8 @@ Channel volume range: 0 to -60 dB → bytes 0x78 to 0x14.
 | ~~**Phase** 0°→180°~~ | ~~Find phase command~~ | **DONE 2026-07-06** — CMD 0x05 selector 0x02; see PROTOCOL.md "Phase invert" |
 | ~~**Delay** (e.g. set 1.5 ms)~~ | ~~Find delay addr + encoding~~ | **DONE 2026-07-06** — CMD 0x08 sub 0x04, float32 ms; see PROTOCOL.md "CMD 0x08 float-write family" |
 | ~~**Routing** (change one crosspoint)~~ | ~~Find routing matrix command~~ | **DONE 2026-07-06** — CMD 0x20, one packet per output (all CH1-10); 14 inputs, value=0x80+pct; see PROTOCOL.md "Routing matrix write" |
-| **Preset save** (M1 save button) | Find write sequence | 6 slots total |
-| **Preset load** (select M2) | Find read/apply sequence | |
+| ~~**Preset save** (M1 save button)~~ | ~~Find write sequence~~ | **DONE 2026-07-06** — CMD 0x08 sub 0x06, byte[7]=0x80\|slot; see PROTOCOL.md "Preset save / recall" |
+| ~~**Preset load** (select M2)~~ | ~~Find read/apply sequence~~ | **DONE 2026-07-06** — CMD 0x08 sub 0x06, byte[7]=slot (no 0x80 bit) |
 | ~~**Bridge** CH7+CH8 toggle~~ | ~~Find bridge command~~ | **DONE 2026-07-06** — CMD 0x1c sub 0x28, byte[19] bit 0x80; see PROTOCOL.md "Bridge CH7+CH8" |
 | ~~**Input source** switch~~ | ~~Find source select command~~ | **DONE 2026-07-06** — CMD 0x05 @ 0x00b7, two registers: low=selector 0x26, high=selector 0x0e; see PROTOCOL.md "Input source select" |
 | ~~**Main volume** change~~ | ~~Find master vol command~~ | **DONE 2026-07-05** — CMD 0x08 sub 0x0c, see PROTOCOL.md "Master volume write" |

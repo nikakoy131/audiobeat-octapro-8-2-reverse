@@ -406,6 +406,16 @@ class UhidShim:
             return f"CH{payload[7]} EQ RESET (CMD 0x05 sub 0x07 @ master addr)"
         if (
             len(payload) >= 8
+            and payload[2] == 0x08
+            and payload[4:6] == MASTER_VOLUME_ADDR
+            and payload[6] == 0x06
+            and 1 <= (payload[7] & 0x7F) <= 6
+        ):
+            slot = payload[7] & 0x7F
+            act = "SAVE" if payload[7] & 0x80 else "RECALL"
+            return f"PRESET {act} M{slot} (CMD 0x08 sub 0x06)"
+        if (
+            len(payload) >= 8
             and payload[2] == 0x05
             and payload[4:6] == MASTER_VOLUME_ADDR
             and payload[6] == SOURCE_LOW_SUB_BYTE

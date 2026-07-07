@@ -643,6 +643,30 @@ with a zero trailer); it is stale app-buffer data the firmware ignores, so the
 builder sends a clean zero trailer. Builder `packet.build_speaker_type(ch,
 code)`; CLI `write speaker-type --channel N --type hf|mf|lf|mhf|mlf|ff`.
 
+### Preset save / recall — SOLVED 2026-07-06 (CMD 0x08 sub 0x06, M1–M6)
+
+The 6 preset slots (M1–M6) save/recall via **CMD 0x08, sub-byte `0x06`**, addr
+`0x00b7` — the "0x06 sub-family" earlier notes left unidentified. **byte[7]
+encodes both the operation and the slot:**
+
+```
+save   Ms:  e0 a2 08 00 b7 00 06 <0x80|s> 00 00 00 <csum> 80
+recall Ms:  e0 a2 08 00 b7 00 06 <s>      00 00 00 <csum> 00
+```
+
+- **byte[7]** = `0x80 | slot` (save) or `slot` (recall) — the high bit is the
+  save/recall discriminator. Verified saves M1/M2/M5/M6, recalls M3/M5.
+- **byte[8:11]** are stale buffer bytes the device ignores (the app sends
+  leftovers; the builder zeros them).
+- **checksum** at byte[11] = `(sum(pkt[4:11]) − 0x20) & 0xFF`.
+- **byte[12]** trailer = `0x80` (save) / `0x00` (recall).
+
+On recall the app additionally emits a `0x1c` walking-bit refresh packet (the
+same companion seen with bridge) and then re-reads every channel to repaint its
+UI — but the **device applies the preset on this single 0x08 packet**. Builders
+`packet.build_preset_save(slot)` / `build_preset_recall(slot)`; CLI `write
+preset-save --slot N` / `write preset-recall --slot N`.
+
 ### Routing matrix write — SOLVED 2026-07-06 (CMD 0x20, per output row)
 
 The crosspoint mixer is a new opcode **`0x20`**, **one packet per output
