@@ -15,16 +15,32 @@ HEADER_MAGIC = b"US002"
 BLOCK_LEN = 238
 MIN_FILE_LEN = len(HEADER_MAGIC) + 10 * BLOCK_LEN  # 2385
 
-# Per-block layout offsets (relative to block start, derived from dsp_m2.dat):
-#  [0:32]    routing matrix (32 bytes; signed int8 /10.0, 0x80 = mute)
-#  [32:38]   UNKNOWN (6 bytes) — decode to non-filter floats; meaning TBD
+# Per-block layout offsets (relative to block start, derived from dsp_m2.dat and
+# verified 2026-07-06 against an app export with known CH1 values gain=-10.0,
+# delay=2.5 ms, speaker type=HF):
+#  [0:30]    routing matrix (30 bytes; device read-format — NOT the CMD 0x20
+#            write format; earlier notes over-read this as 32 bytes)
+#  [30:34]   float32 LE per-channel GAIN (dB)
+#  [34:38]   float32 LE per-channel DELAY (ms)
 #  [38:42]   float32 LE HPF freq (Hz)
 #  [42]      HPF slope code (dB/oct = (code+1)*6; 0x00=6 … 0x05=36 … 0x07=48)
-#  [43]      UNKNOWN byte (observed 0x00)
+#  [43]      HPF filter type (0=Linkwitz-Riley, 1=Bessel, 2=Butterworth)
 #  [44:48]   float32 LE LPF freq (Hz); 20600.0 = bypass
 #  [48]      LPF slope code
-#  [49:52]   UNKNOWN (3 bytes) — byte [51] varies; meaning TBD
+#  [49]      LPF filter type
+#  [50]      UNKNOWN byte (observed 0x00)
+#  [51]      SPEAKER TYPE (1..6 = HF/MF/LF/MHF/MLF/FF, menu order)
 #  [52:238]  EQ data: 31 bands × 6 bytes (exactly fills the block)
+GAIN_OFFSET = 30
+DELAY_OFFSET = 34
+HPF_FREQ_OFFSET = 38
+HPF_SLOPE_OFFSET = 42
+HPF_TYPE_OFFSET = 43
+LPF_FREQ_OFFSET = 44
+LPF_SLOPE_OFFSET = 48
+LPF_TYPE_OFFSET = 49
+SPEAKER_TYPE_OFFSET = 51
+EQ_OFFSET = 52
 
 
 @dataclass
@@ -32,10 +48,15 @@ class DatChannel:
     index: int  # 1-based
     raw: bytes
     routing: RoutingMatrix
+    gain_db: float
+    delay_ms: float
     hpf_freq_hz: float
     hpf_slope_byte: int
+    hpf_type_byte: int
     lpf_freq_hz: float
     lpf_slope_byte: int
+    lpf_type_byte: int
+    speaker_type_byte: int
     eq_bands: list[EqBand]
     unknown_bytes: dict[str, str] = field(default_factory=dict)
 
@@ -74,29 +95,37 @@ def _parse_block(block: bytes, ch_index: int, warn: WarnFn | None) -> DatChannel
 
     from octapro.protocol.constants import KNOWN_SLOPES
 
-    hpf_freq = _f32(38)
-    hpf_slope = _u8(42)
+    gain_db = _f32(GAIN_OFFSET)
+    delay_ms = _f32(DELAY_OFFSET)
+    hpf_freq = _f32(HPF_FREQ_OFFSET)
+    hpf_slope = _u8(HPF_SLOPE_OFFSET)
     if hpf_slope not in KNOWN_SLOPES and warn:
         warn("dat_hpf_slope", f"0x{hpf_slope:02x}", f"ch={ch_index}")
-    lpf_freq = _f32(44)
-    lpf_slope = _u8(48)
+    hpf_type = _u8(HPF_TYPE_OFFSET)
+    lpf_freq = _f32(LPF_FREQ_OFFSET)
+    lpf_slope = _u8(LPF_SLOPE_OFFSET)
     if lpf_slope not in KNOWN_SLOPES and warn:
         warn("dat_lpf_slope", f"0x{lpf_slope:02x}", f"ch={ch_index}")
+    lpf_type = _u8(LPF_TYPE_OFFSET)
+    speaker_type = _u8(SPEAKER_TYPE_OFFSET)
     # EQ fills [52:238] exactly (31 × 6 = 186 bytes)
-    eq_bands = parse_eq_block(block, offset=52, warn=warn)
+    eq_bands = parse_eq_block(block, offset=EQ_OFFSET, warn=warn)
 
     return DatChannel(
         index=ch_index,
         raw=block,
         routing=routing,
+        gain_db=gain_db,
+        delay_ms=delay_ms,
         hpf_freq_hz=hpf_freq,
         hpf_slope_byte=hpf_slope,
+        hpf_type_byte=hpf_type,
         lpf_freq_hz=lpf_freq,
         lpf_slope_byte=lpf_slope,
+        lpf_type_byte=lpf_type,
+        speaker_type_byte=speaker_type,
         eq_bands=eq_bands,
         unknown_bytes={
-            "bytes_32_38": block[32:38].hex() if len(block) >= 38 else "",
-            "byte_43": f"0x{_u8(43):02x}",
-            "bytes_49_52": block[49:52].hex() if len(block) >= 52 else "",
+            "byte_50": f"0x{_u8(50):02x}",
         },
     )
