@@ -1,4 +1,4 @@
-# FINDINGS_DAT.md — Preset File Format Analysis (dsp_m2.dat)
+# DAT Preset File Format Analysis (dsp_m2.dat)
 
 ## File Info
 

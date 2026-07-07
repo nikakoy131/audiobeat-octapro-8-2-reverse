@@ -303,9 +303,9 @@ Body:   10 × 238 bytes  (one block per channel, stride confirmed)
 [52:238] EQ data — 31 bands × 6 bytes each                 [USB: cd[53:239]]
 ```
 
-So `.dat block = device block [1:239]`. `import-dat` pushes gain/delay/HPF/LPF/
+So `.dat block = device block [1:239]`. `preset import` pushes gain/delay/HPF/LPF/
 speaker-type/EQ via the write commands (routing excluded — its read-format does
-not map to the CMD 0x20 write); `export-dat` reads the 10 device blocks and
+not map to the CMD 0x20 write); `preset export` reads the 10 device blocks and
 writes `US002 + 10×[1:239] + 00 00`.
 
 ### EQ Band structure (6 bytes × 31 bands)
@@ -692,8 +692,8 @@ recall Ms:  e0 a2 08 00 b7 00 06 <s>      00 00 00 <csum> 00
 On recall the app additionally emits a `0x1c` walking-bit refresh packet (the
 same companion seen with bridge) and then re-reads every channel to repaint its
 UI — but the **device applies the preset on this single 0x08 packet**. Builders
-`packet.build_preset_save(slot)` / `build_preset_recall(slot)`; CLI `write
-preset-save --slot N` / `write preset-recall --slot N`.
+`packet.build_preset_save(slot)` / `build_preset_recall(slot)`; CLI `preset
+save --slot N` / `preset recall --slot N`.
 
 ### Routing matrix write — SOLVED 2026-07-06 (CMD 0x20, per output row)
 
@@ -774,8 +774,8 @@ the keepalive-read source ID (`SOURCE_NAMES`):
 
 Live captures (byte-perfect): low `…26 00 bd` / `…26 01 be`, high `…0e 00 a5`
 / `…0e 01 a6`. Builders `packet.build_source_low(code)` /
-`build_source_high(code)`; CLI `write source-low --to high-level|low-level|opt|
-usb-audio` and `write source-high --to bt|usb-disk`. Note: when the shim (or a
+`build_source_high(code)`; CLI `write source --tier low --to high-level|low-level|opt|
+usb-audio` and `write source --tier high --to bt|usb-disk`. Note: when the shim (or a
 real device that rejects the change) keeps echoing the old source in its
 keepalive reply, the app's dropdown snaps back — the write packet is still sent.
 
@@ -1064,8 +1064,12 @@ CLI: `write eq --channel N --band B [--db F] [--freq Hz] [--q Q]`. Builder:
 
 ## Still Unknown
 
-See `FINDINGS_MANUAL_GAP.md` for the full manual-vs-known gap and priority
-capture plan. High-level outstanding items:
+**Most items below are now solved** — see CLAUDE.md "What Is Still Unknown"
+for current status and the relevant sections of this document; this list is
+kept for research history and the handful of sub-items (e.g. cmd `0x1c` sub
+`0x21` purpose) that may still be open. See `docs/findings/MANUAL_GAP.md` for
+the original manual-vs-known gap and priority capture plan. Original
+high-level outstanding items:
 
 - LPF write command (expected: addr=0xNNb7, sub=?, TYPE_BYTE=?)
 - EQ band gain/Q write addresses and TYPE_BYTE values
@@ -1108,5 +1112,5 @@ whether any commit is required — treat the current commit step as suspect.
 
 ### Full unique command catalog from captures
 
-See `FINDINGS_MANUAL_GAP.md` → "Pcap findings" for the table of all 55 unique
+See `docs/findings/MANUAL_GAP.md` → "Pcap findings" for the table of all 55 unique
 (CMD, ADDR, SUB) signatures seen across `usb1.pcapng` + `usb2.pcapng`.

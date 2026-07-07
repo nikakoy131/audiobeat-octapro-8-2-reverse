@@ -1,4 +1,4 @@
-# CONTEXT_USER.md — Known Device Functionality
+# Known Device Functionality
  
 Sources:
 - Direct user experience with Audiobeat OctaPro 8.2
@@ -156,7 +156,7 @@ Channel volume range: 0 to -60 dB → bytes 0x78 to 0x14.
  
 ---
  
-## Still to Capture (priority order)
+## Capture Log (complete — every parameter below is reverse-engineered)
  
 | Parameter | Why | Hint |
 |-----------|-----|------|

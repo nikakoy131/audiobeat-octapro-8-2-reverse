@@ -13,7 +13,7 @@ instead of a real device — no hardware required.
 - On **macOS**, faking a virtual HID device is blocked: `IOHIDUserDeviceCreate`
   requires the `com.apple.developer.hid.virtual.device` entitlement, enforced
   by the kernel even as root. Confirmed empirically 2026-07-05 (see session
-  history / FINDINGS_EXE.md). A signed DriverKit extension would be needed —
+  history / findings/EXE.md). A signed DriverKit extension would be needed —
   out of scope.
 - On **Linux**, `/dev/uhid` provides the same capability in userspace with no
   entitlement wall — just root or a udev rule granting access to `/dev/uhid`.
@@ -69,7 +69,7 @@ All of this lives in the repo, on branch `fix/pyusb-transport-session-open`:
      respond to it correctly, just log it.
 
 3. **Run the app under wine on Linux** and drag the Main fader.
-   - Known risk (from prior web research, see FINDINGS_EXE.md): wine's HID
+   - Known risk (from prior web research, see findings/EXE.md): wine's HID
      enumeration via `setupapi`/registry is incomplete, and other users have
      hit apps that see the HID device but never "acknowledge" it. If the app
      stalls at connection despite the shim responding correctly, this is the

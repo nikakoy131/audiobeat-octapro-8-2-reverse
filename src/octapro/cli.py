@@ -10,7 +10,8 @@ from octapro import __version__
 
 app = typer.Typer(
     name="octaproctl",
-    help="Read-only USB HID CLI for the Audiobeat OctaPro 8.2 / SP601 Car DSP Amplifier.",
+    help="USB HID CLI for the Audiobeat OctaPro 8.2 / SP601 Car DSP Amplifier — "
+    "read live device state and write DSP parameters (dry-run by default).",
     no_args_is_help=True,
     rich_markup_mode="markdown",
 )
@@ -19,13 +20,14 @@ write_app = typer.Typer(
     help="Write DSP parameters. **Dry-run by default** — add `--commit` to apply.",
     no_args_is_help=True,
 )
-dump_app = typer.Typer(
-    help="Hex-dump raw channel blocks from the live device.", no_args_is_help=True
+preset_app = typer.Typer(
+    help="Manage presets — .dat files (show/import/export) and device slots M1-M6 (save/recall).",
+    no_args_is_help=True,
 )
 
 app.add_typer(read_app, name="read")
 app.add_typer(write_app, name="write")
-app.add_typer(dump_app, name="dump")
+app.add_typer(preset_app, name="preset")
 
 # ---------------------------------------------------------------------------
 # Shared option types
@@ -38,6 +40,10 @@ _LogFile = Annotated[
 ]
 _NoKA = Annotated[
     bool, typer.Option("--no-keepalive", help="Skip keepalive thread (for quick one-shot reads).")
+]
+_Commit = Annotated[
+    bool,
+    typer.Option("--commit", help="Actually send — without this, only prints what would be sent."),
 ]
 
 
@@ -86,74 +92,6 @@ def info(
 
 
 # ---------------------------------------------------------------------------
-# parse-dat
-# ---------------------------------------------------------------------------
-
-@app.command(name="parse-dat")
-def parse_dat(
-    path: Annotated[Path, typer.Argument(help="Path to a .dat preset file (US002 format).")],
-    channel: Annotated[
-        int | None,
-        typer.Option("--channel", "-c", min=1, max=10, help="Show only channel N (1-10)."),
-    ] = None,
-    verbose: _Verbose = False,
-    quiet: _Quiet = False,
-    log_file: _LogFile = None,
-) -> None:
-    """Parse a .dat preset file **offline** — no device required."""
-    _setup(verbose, quiet, log_file)
-    from octapro.commands.dat import run_parse_dat
-    sys.exit(run_parse_dat(path=path, channel=channel))
-
-
-@app.command(name="export-dat")
-def export_dat(
-    path: Annotated[Path, typer.Argument(help="Output .dat path to write.")],
-    no_keepalive: _NoKA = False,
-    verbose: _Verbose = False,
-    quiet: _Quiet = False,
-    log_file: _LogFile = None,
-) -> None:
-    """Read all 10 channels from the device and write a US002 .dat preset."""
-    _setup(verbose, quiet, log_file)
-    from octapro.commands.preset_io import run_export_dat
-    sys.exit(run_export_dat(path=path, no_keepalive=no_keepalive))
-
-
-@app.command(name="import-dat")
-def import_dat(
-    path: Annotated[Path, typer.Argument(help="Path to a .dat preset file (US002 format).")],
-    channel: Annotated[
-        int | None,
-        typer.Option("--channel", "-c", min=1, max=10, help="Import only channel N (1-10)."),
-    ] = None,
-    skip_flat_eq: Annotated[
-        bool, typer.Option("--skip-flat-eq", help="Skip EQ bands that are flat (0 dB, default Q).")
-    ] = False,
-    commit: Annotated[
-        bool, typer.Option("--commit", help="Actually send — without this, prints the plan only.")
-    ] = False,
-    no_keepalive: _NoKA = False,
-    verbose: _Verbose = False,
-    quiet: _Quiet = False,
-    log_file: _LogFile = None,
-) -> None:
-    """Apply a .dat preset to the device (gain, delay, HPF/LPF, speaker type, EQ;
-    routing excluded). **Dry-run unless `--commit`.**"""
-    _setup(verbose, quiet, log_file)
-    from octapro.commands.preset_io import run_import_dat
-    sys.exit(
-        run_import_dat(
-            path=path,
-            commit=commit,
-            channels=[channel] if channel else None,
-            include_flat_eq=not skip_flat_eq,
-            no_keepalive=no_keepalive,
-        )
-    )
-
-
-# ---------------------------------------------------------------------------
 # decode-pcap
 # ---------------------------------------------------------------------------
 
@@ -182,10 +120,7 @@ def probe(
     hex_bytes: Annotated[
         str, typer.Argument(help="256-byte OUT packet as a hex string (spaces OK).")
     ],
-    commit: Annotated[
-        bool,
-        typer.Option("--commit", help="Actually transmit — without this, only prints the packet."),
-    ] = False,
+    commit: _Commit = False,
     verbose: _Verbose = False,
     quiet: _Quiet = False,
     log_file: _LogFile = None,
@@ -213,6 +148,27 @@ def monitor(
     _setup(verbose, quiet, log_file)
     from octapro.commands.monitor import run_monitor
     sys.exit(run_monitor(interval=interval))
+
+
+# ---------------------------------------------------------------------------
+# dump
+# ---------------------------------------------------------------------------
+
+@app.command(name="dump")
+def dump(
+    channel: Annotated[int, typer.Argument(min=1, max=10, help="Channel number 1-10.")],
+    annotate: Annotated[
+        bool, typer.Option("--annotate", help="Show per-byte field labels.")
+    ] = False,
+    no_keepalive: _NoKA = False,
+    verbose: _Verbose = False,
+    quiet: _Quiet = False,
+    log_file: _LogFile = None,
+) -> None:
+    """Hex-dump a raw channel block from the live device."""
+    _setup(verbose, quiet, log_file)
+    from octapro.commands.dump import run_dump_channel
+    sys.exit(run_dump_channel(channel=channel, annotate=annotate, no_keepalive=no_keepalive))
 
 
 # ---------------------------------------------------------------------------
@@ -263,24 +219,104 @@ def read_knob_vol(
 
 
 # ---------------------------------------------------------------------------
-# dump sub-app
+# preset sub-app — .dat files (show/import/export) + device slots (save/recall)
 # ---------------------------------------------------------------------------
 
-@dump_app.command(name="channel")
-def dump_channel(
-    channel: Annotated[int, typer.Argument(min=1, max=10, help="Channel number 1-10.")],
-    annotate: Annotated[
-        bool, typer.Option("--annotate", help="Show per-byte field labels.")
-    ] = False,
+@preset_app.command(name="show")
+def preset_show(
+    path: Annotated[Path, typer.Argument(help="Path to a .dat preset file (US002 format).")],
+    channel: Annotated[
+        int | None,
+        typer.Option("--channel", "-c", min=1, max=10, help="Show only channel N (1-10)."),
+    ] = None,
+    verbose: _Verbose = False,
+    quiet: _Quiet = False,
+    log_file: _LogFile = None,
+) -> None:
+    """Parse and display a .dat preset file **offline** — no device required."""
+    _setup(verbose, quiet, log_file)
+    from octapro.commands.dat import run_parse_dat
+    sys.exit(run_parse_dat(path=path, channel=channel))
+
+
+@preset_app.command(name="export")
+def preset_export(
+    path: Annotated[Path, typer.Argument(help="Output .dat path to write.")],
     no_keepalive: _NoKA = False,
     verbose: _Verbose = False,
     quiet: _Quiet = False,
     log_file: _LogFile = None,
 ) -> None:
-    """Hex-dump a raw channel block from the live device."""
+    """Read all 10 channels from the device and write a US002 .dat preset."""
     _setup(verbose, quiet, log_file)
-    from octapro.commands.dump import run_dump_channel
-    sys.exit(run_dump_channel(channel=channel, annotate=annotate, no_keepalive=no_keepalive))
+    from octapro.commands.preset_io import run_export_dat
+    sys.exit(run_export_dat(path=path, no_keepalive=no_keepalive))
+
+
+@preset_app.command(name="import")
+def preset_import(
+    path: Annotated[Path, typer.Argument(help="Path to a .dat preset file (US002 format).")],
+    channel: Annotated[
+        int | None,
+        typer.Option("--channel", "-c", min=1, max=10, help="Import only channel N (1-10)."),
+    ] = None,
+    skip_flat_eq: Annotated[
+        bool, typer.Option("--skip-flat-eq", help="Skip EQ bands that are flat (0 dB, default Q).")
+    ] = False,
+    commit: _Commit = False,
+    no_keepalive: _NoKA = False,
+    verbose: _Verbose = False,
+    quiet: _Quiet = False,
+    log_file: _LogFile = None,
+) -> None:
+    """Apply a .dat preset to the device (gain, delay, HPF/LPF, speaker type, EQ;
+    routing excluded). **Dry-run unless `--commit`.**"""
+    _setup(verbose, quiet, log_file)
+    from octapro.commands.preset_io import run_import_dat
+    sys.exit(
+        run_import_dat(
+            path=path,
+            commit=commit,
+            channels=[channel] if channel else None,
+            include_flat_eq=not skip_flat_eq,
+            no_keepalive=no_keepalive,
+        )
+    )
+
+
+@preset_app.command(name="save")
+def preset_save(
+    slot: Annotated[
+        int, typer.Option("--slot", "-s", min=1, max=6, help="Preset slot M1-M6.")
+    ],
+    commit: _Commit = False,
+    no_keepalive: _NoKA = False,
+    verbose: _Verbose = False,
+    quiet: _Quiet = False,
+    log_file: _LogFile = None,
+) -> None:
+    """Save current settings to a preset slot (M1-M6) — **overwrites it**.
+    **Dry-run unless `--commit`.**"""
+    _setup(verbose, quiet, log_file)
+    from octapro.commands.write import run_write_preset
+    sys.exit(run_write_preset(slot=slot, save=True, commit=commit, no_keepalive=no_keepalive))
+
+
+@preset_app.command(name="recall")
+def preset_recall(
+    slot: Annotated[
+        int, typer.Option("--slot", "-s", min=1, max=6, help="Preset slot M1-M6.")
+    ],
+    commit: _Commit = False,
+    no_keepalive: _NoKA = False,
+    verbose: _Verbose = False,
+    quiet: _Quiet = False,
+    log_file: _LogFile = None,
+) -> None:
+    """Recall (load) a preset slot (M1-M6) onto the device. **Dry-run unless `--commit`.**"""
+    _setup(verbose, quiet, log_file)
+    from octapro.commands.write import run_write_preset
+    sys.exit(run_write_preset(slot=slot, save=False, commit=commit, no_keepalive=no_keepalive))
 
 
 # ---------------------------------------------------------------------------
@@ -309,9 +345,7 @@ def write_hpf(
     filter_type: Annotated[
         str, typer.Option("--type", help="Filter type: bessel, butterworth, or lr.")
     ] = "bessel",
-    commit: Annotated[
-        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
-    ] = False,
+    commit: _Commit = False,
     no_keepalive: _NoKA = False,
     verbose: _Verbose = False,
     quiet: _Quiet = False,
@@ -333,9 +367,7 @@ def write_lpf(
     filter_type: Annotated[
         str, typer.Option("--type", help="Filter type: bessel, butterworth, or lr.")
     ] = "bessel",
-    commit: Annotated[
-        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
-    ] = False,
+    commit: _Commit = False,
     no_keepalive: _NoKA = False,
     verbose: _Verbose = False,
     quiet: _Quiet = False,
@@ -357,9 +389,7 @@ def write_gain(
         ),
     ],
     db: Annotated[float, typer.Option("--db", help="Fader level in dB.")],
-    commit: Annotated[
-        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
-    ] = False,
+    commit: _Commit = False,
     no_keepalive: _NoKA = False,
     verbose: _Verbose = False,
     quiet: _Quiet = False,
@@ -374,9 +404,7 @@ def write_gain(
 @write_app.command(name="master")
 def write_master(
     db: Annotated[float, typer.Option("--db", help="Master volume in dB (+6..-60).")],
-    commit: Annotated[
-        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
-    ] = False,
+    commit: _Commit = False,
     no_keepalive: _NoKA = False,
     verbose: _Verbose = False,
     quiet: _Quiet = False,
@@ -398,9 +426,7 @@ def write_mute(
         ),
     ] = 0,
     on: Annotated[bool, typer.Option("--on/--off", help="Mute (--on) or unmute (--off).")] = True,
-    commit: Annotated[
-        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
-    ] = False,
+    commit: _Commit = False,
     no_keepalive: _NoKA = False,
     verbose: _Verbose = False,
     quiet: _Quiet = False,
@@ -421,9 +447,7 @@ def write_solo(
     on: Annotated[
         bool, typer.Option("--on/--off", help="Solo (--on) or un-solo (--off).")
     ] = True,
-    commit: Annotated[
-        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
-    ] = False,
+    commit: _Commit = False,
     no_keepalive: _NoKA = False,
     verbose: _Verbose = False,
     quiet: _Quiet = False,
@@ -445,9 +469,7 @@ def write_noise_gate(
     db: Annotated[
         float | None, typer.Option("--db", help="Threshold in dB (for `set`).")
     ] = None,
-    commit: Annotated[
-        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
-    ] = False,
+    commit: _Commit = False,
     no_keepalive: _NoKA = False,
     verbose: _Verbose = False,
     quiet: _Quiet = False,
@@ -466,45 +488,6 @@ def write_noise_gate(
     )
 
 
-@write_app.command(name="preset-save")
-def write_preset_save(
-    slot: Annotated[
-        int, typer.Option("--slot", "-s", min=1, max=6, help="Preset slot M1-M6.")
-    ],
-    commit: Annotated[
-        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
-    ] = False,
-    no_keepalive: _NoKA = False,
-    verbose: _Verbose = False,
-    quiet: _Quiet = False,
-    log_file: _LogFile = None,
-) -> None:
-    """Save current settings to a preset slot (M1-M6) — **overwrites it**.
-    **Dry-run unless `--commit`.**"""
-    _setup(verbose, quiet, log_file)
-    from octapro.commands.write import run_write_preset
-    sys.exit(run_write_preset(slot=slot, save=True, commit=commit, no_keepalive=no_keepalive))
-
-
-@write_app.command(name="preset-recall")
-def write_preset_recall(
-    slot: Annotated[
-        int, typer.Option("--slot", "-s", min=1, max=6, help="Preset slot M1-M6.")
-    ],
-    commit: Annotated[
-        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
-    ] = False,
-    no_keepalive: _NoKA = False,
-    verbose: _Verbose = False,
-    quiet: _Quiet = False,
-    log_file: _LogFile = None,
-) -> None:
-    """Recall (load) a preset slot (M1-M6) onto the device. **Dry-run unless `--commit`.**"""
-    _setup(verbose, quiet, log_file)
-    from octapro.commands.write import run_write_preset
-    sys.exit(run_write_preset(slot=slot, save=False, commit=commit, no_keepalive=no_keepalive))
-
-
 @write_app.command(name="routing")
 def write_routing(
     output: Annotated[
@@ -518,9 +501,7 @@ def write_routing(
             "BT-L,BT-R,UDISK-L,UDISK-R,OPT-L,OPT-R,USB-L,USB-R.",
         ),
     ],
-    commit: Annotated[
-        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
-    ] = False,
+    commit: _Commit = False,
     no_keepalive: _NoKA = False,
     verbose: _Verbose = False,
     quiet: _Quiet = False,
@@ -548,46 +529,33 @@ def write_routing(
     )
 
 
-@write_app.command(name="source-high")
-def write_source_high(
-    to: Annotated[
-        str, typer.Option("--to", "-t", help="High-priority source: bt or usb-disk.")
+@write_app.command(name="source")
+def write_source(
+    tier: Annotated[
+        str, typer.Option("--tier", help="Source tier: high (auto-switch) or low (normal).")
     ],
-    commit: Annotated[
-        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
-    ] = False,
-    no_keepalive: _NoKA = False,
-    verbose: _Verbose = False,
-    quiet: _Quiet = False,
-    log_file: _LogFile = None,
-) -> None:
-    """Select the HIGH (auto-switch) input source: bt or usb-disk. **Dry-run unless `--commit`.**"""
-    _setup(verbose, quiet, log_file)
-    from octapro.commands.write import run_write_source
-    sys.exit(run_write_source(tier="high", source=to, commit=commit, no_keepalive=no_keepalive))
-
-
-@write_app.command(name="source-low")
-def write_source_low(
     to: Annotated[
         str,
         typer.Option(
-            "--to", "-t", help="Normal-priority source: high-level, low-level, opt, or usb-audio."
+            "--to", "-t",
+            help="Source name. --tier high: bt, usb-disk. "
+            "--tier low: high-level, low-level, opt, usb-audio.",
         ),
     ],
-    commit: Annotated[
-        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
-    ] = False,
+    commit: _Commit = False,
     no_keepalive: _NoKA = False,
     verbose: _Verbose = False,
     quiet: _Quiet = False,
     log_file: _LogFile = None,
 ) -> None:
-    """Select the LOW (normal) input source: high-level/low-level/opt/usb-audio.
-    **Dry-run unless `--commit`.**"""
+    """Select an input source (CMD 0x05, two independent tiers). **Dry-run unless `--commit`.**"""
     _setup(verbose, quiet, log_file)
+    tier = tier.strip().lower()
+    if tier not in ("high", "low"):
+        typer.echo("--tier must be 'high' or 'low'", err=True)
+        raise typer.Exit(1)
     from octapro.commands.write import run_write_source
-    sys.exit(run_write_source(tier="low", source=to, commit=commit, no_keepalive=no_keepalive))
+    sys.exit(run_write_source(tier=tier, source=to, commit=commit, no_keepalive=no_keepalive))
 
 
 @write_app.command(name="speaker-type")
@@ -601,9 +569,7 @@ def write_speaker_type(
             "--type", "-t", help="Speaker type: hf, mf, lf, mhf, mlf, or ff (menu order 1-6)."
         ),
     ],
-    commit: Annotated[
-        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
-    ] = False,
+    commit: _Commit = False,
     no_keepalive: _NoKA = False,
     verbose: _Verbose = False,
     quiet: _Quiet = False,
@@ -631,9 +597,7 @@ def write_eq(
         float | None,
         typer.Option("--freq", help="Center frequency in Hz (default = band's standard center)."),
     ] = None,
-    commit: Annotated[
-        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
-    ] = False,
+    commit: _Commit = False,
     no_keepalive: _NoKA = False,
     verbose: _Verbose = False,
     quiet: _Quiet = False,
@@ -659,9 +623,7 @@ def write_eq(
 def write_delay(
     channel: Annotated[int, typer.Option("--channel", "-c", min=1, max=10, help="Channel 1-10.")],
     ms: Annotated[float, typer.Option("--ms", help="Time-alignment delay in milliseconds.")],
-    commit: Annotated[
-        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
-    ] = False,
+    commit: _Commit = False,
     no_keepalive: _NoKA = False,
     verbose: _Verbose = False,
     quiet: _Quiet = False,
@@ -679,9 +641,7 @@ def write_eq_pass(
     bypass: Annotated[
         bool, typer.Option("--on/--off", help="Bypass the channel EQ (--on) or engage it (--off).")
     ] = True,
-    commit: Annotated[
-        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
-    ] = False,
+    commit: _Commit = False,
     no_keepalive: _NoKA = False,
     verbose: _Verbose = False,
     quiet: _Quiet = False,
@@ -703,9 +663,7 @@ def write_eq_reset(
     all_channels: Annotated[
         bool, typer.Option("--all", help="Reset EQ on ALL channels (the RST 'All' option).")
     ] = False,
-    commit: Annotated[
-        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
-    ] = False,
+    commit: _Commit = False,
     no_keepalive: _NoKA = False,
     verbose: _Verbose = False,
     quiet: _Quiet = False,
@@ -732,9 +690,7 @@ def write_phase(
     invert: Annotated[
         bool, typer.Option("--invert/--normal", help="180° invert (--invert) or 0° (--normal).")
     ] = True,
-    commit: Annotated[
-        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
-    ] = False,
+    commit: _Commit = False,
     no_keepalive: _NoKA = False,
     verbose: _Verbose = False,
     quiet: _Quiet = False,
@@ -753,9 +709,7 @@ def write_bridge(
     on: Annotated[
         bool, typer.Option("--on/--off", help="Bridge CH7+CH8 (--on) or unbridge (--off).")
     ] = True,
-    commit: Annotated[
-        bool, typer.Option("--commit", help="Actually send — without this, prints the packet only.")
-    ] = False,
+    commit: _Commit = False,
     no_keepalive: _NoKA = False,
     verbose: _Verbose = False,
     quiet: _Quiet = False,

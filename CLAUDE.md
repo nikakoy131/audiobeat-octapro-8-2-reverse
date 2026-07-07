@@ -45,8 +45,8 @@ src/octapro/
     info.py            handshake + firmware banner
     read.py            read channel(s), decoded table output
     dump.py            raw hex + annotated hex of a block
-    dat.py             parse-dat <file>
-    preset_io.py       import-dat / export-dat (full US002 round-trip)
+    dat.py             preset show <file>
+    preset_io.py       preset import / preset export (full US002 round-trip)
     monitor.py         live poll loop, diff highlight
     probe.py           raw packet sender (--commit gate)
     write.py           write hpf / write gain (dry-run default)
@@ -64,13 +64,16 @@ tests/
 | File | Purpose |
 |------|---------|
 | `PROTOCOL.md` | Primary protocol reference — packet layout, checksum, commands, channel block format |
-| `CONTEXT_USER.md` | Device feature inventory and priority-ordered "Still to Capture" list |
-| `FINDINGS_*.md` | Analysis notes from Wireshark, EXE, and DAT file investigation |
+| `docs/context_user.md` | Device feature inventory and capture log (complete — all parameters reverse-engineered) |
+| `docs/findings/*.md` | Analysis notes from Wireshark, EXE, and DAT file investigation |
 | `usb1.pcapng` | 2736 packets — enumeration + full channel readback |
 | `usb2.pcapng` | 566 packets — live EQ/filter parameter changes |
 | `dsp_m2.dat` | Preset export (US002 format, 2387 bytes, 10×238-byte channel blocks) |
 
 ## Protocol Quick Reference
+
+> `PROTOCOL.md` is the canonical protocol reference — this section is an agent
+> cheat-sheet and may lag behind it on fine detail.
 
 **Device:** VID=`0x8888`, PID=`0x1234`, USB Full Speed, HID CONTROL transfers (not Interrupt)
 
@@ -111,10 +114,10 @@ is mandatory after connect — otherwise READ_BLOCK returns a short `ee 55` refu
   and a 1..6 enum in byte[7] (HF..FF, menu order): `write speaker-type`,
   `build_speaker_type(ch, code)`, `constants.speaker_type_code`. See
   PROTOCOL.md "Speaker type". **Input source select** is CMD 0x05 at the
-  global addr `0x00b7` with two registers: `write source-low` (selector
-  `0x26`, byte[7]=keepalive source ID 0..3) and `write source-high` (selector
-  `0x0e`, byte[7]=0 BT / 1 USB-disk). Builders `build_source_low/high`. See
-  PROTOCOL.md "Input source select".
+  global addr `0x00b7` with two registers: `write source --tier low`
+  (selector `0x26`, byte[7]=keepalive source ID 0..3) and `write source
+  --tier high` (selector `0x0e`, byte[7]=0 BT / 1 USB-disk). Builders
+  `build_source_low/high`. See PROTOCOL.md "Input source select".
 - `0x0a` WRITE_DSP — real-time DSP write; sub `0x05`=HPF freq; **EQ band
   = sub `0x08 + (band-1)`** (band 1..31 → sub `0x08`..`0x26`), one atomic
   packet carries freq[7:11]+gain[11]+Q[12] (Q byte = round(Q×10)), no trailer,
@@ -132,9 +135,8 @@ is mandatory after connect — otherwise READ_BLOCK returns a short `ee 55` refu
   (shared `_build_volume_write`). See PROTOCOL.md "CMD 0x08 float-write family".
   **Preset save/recall** also rides CMD 0x08 but sub-byte `0x06` (addr
   `0x00b7`): byte[7]=`0x80|slot` saves, `slot` recalls (M1..M6); checksum
-  `(sum(pkt[4:11])-0x20)` at [11]. CLI `write preset-save`/`write
-  preset-recall`; builders `build_preset_save/recall`. See PROTOCOL.md
-  "Preset save / recall".
+  `(sum(pkt[4:11])-0x20)` at [11]. CLI `preset save`/`preset recall`;
+  builders `build_preset_save/recall`. See PROTOCOL.md "Preset save / recall".
 - `0x1c` BRIDGE (sub `0x28`, addr `0x00b7`) — bridge CH7+CH8 (only bridgeable
   pair). Fixed 23-byte payload; state in byte[19] bit `0x80`, checksum at
   byte[31] over `sum(pkt[4:31])`. CLI: `write bridge --on|--off`. Builder:
@@ -197,8 +199,9 @@ exposed via the CLI (2026-07-06, via the uhid shim): master vol, faders, delay,
 mute, phase, solo (macro), bridge, speaker type, 31-band EQ (gain/freq/Q), EQ
 pass, EQ reset (per-channel + all), HPF+LPF (freq/slope/type), input source
 (high+low), routing matrix (all 10 outputs incl. CH7/CH8 sub-pair), preset
-save/recall (M1-M6), and the factory-locked noise gate (get/set/on-off).
-Only remaining nicety: applying `.dat` presets directly from file.
+save/recall (M1-M6), the factory-locked noise gate (get/set/on-off), and full
+`.dat` preset file round-trip (`preset show/import/export`; routing excluded
+from import, see PROTOCOL.md ".dat / import-export").
 
 ## Analysis Tools (installed on this machine)
 

@@ -1,4 +1,4 @@
-# FINDINGS_MANUAL_GAP.md — Gap analysis of the HIFI-X12 manual vs reverse-engineered protocol
+# Gap Analysis: HIFI-X12 Manual vs Reverse-Engineered Protocol
 
 Comparison of what the manual (`docs/Sennuopu HIFI-X12 Manual EN V201120.pdf`) and the
 desktop app (`Audiobeat OctaPro 8.2 V1.0.7_250801.exe`) expose vs what we can drive
@@ -58,7 +58,7 @@ Parsed from the English manual (17 pages). Feature → surface exposed to user �
 | Feature | Manual says | RE status |
 |---------|-------------|-----------|
 | 6 internal preset slots (M1–M6) | save / load on device | ❌ handlers `on_actionScene_1..16` present (16, not 6 — app supports more than device exposes) |
-| Export / import .dat | US002 file format | ✅ parser implemented (`octaproctl parse-dat`), writer/apply flow not reversed |
+| Export / import .dat | US002 file format | ✅ full round-trip (`octaproctl preset show/import/export`) |
 
 ---
 
@@ -195,7 +195,7 @@ asking) which parameter groups are supported/active. The high-bit variant
 
 ---
 
-## Priority punch-list for the next capture session
+## Priority punch-list for the next capture session (historical — all items now captured, see `docs/context_user.md`)
 
 Sorted by value of unlocking each feature (highest first):
 
