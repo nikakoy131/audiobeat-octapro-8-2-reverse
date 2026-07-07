@@ -185,7 +185,7 @@ def _read_and_print(transport, ch: int, show_eq: bool = False) -> None:
 
     from octapro.logging import log_packet_in, log_packet_out, warn_unknown
     from octapro.protocol.channel import parse_channel_block
-    from octapro.protocol.constants import LPF_BYPASS_HZ
+    from octapro.protocol.constants import FILTER_TYPE_NAMES, LPF_BYPASS_HZ, SPEAKER_TYPE_NAMES
     from octapro.protocol.packet import InPacket, build_read_channel
 
     console = Console()
@@ -205,19 +205,25 @@ def _read_and_print(transport, ch: int, show_eq: bool = False) -> None:
     hpf_str = f"{block.hpf_freq_hz:.1f} Hz"
     active_eq = [b for b in block.eq_bands if b.gain_db is not None and abs(b.gain_db) > 0.05]
 
+    def _slope_type(slope: int, ftype: int) -> str:
+        slope_str = _SLOPE_NAMES.get(slope, f"0x{slope:02x} (unknown)")
+        type_str = FILTER_TYPE_NAMES.get(ftype, f"type 0x{ftype:02x}")
+        return f"{slope_str} · {type_str}"
+
+    speaker_str = SPEAKER_TYPE_NAMES.get(
+        block.speaker_type_byte, f"0x{block.speaker_type_byte:02x} (unset/unknown)"
+    )
+
     table = Table(title=f"Channel {ch}", show_header=False, min_width=40)
     table.add_column("Field", style="bold")
     table.add_column("Value")
+    table.add_row("Speaker type", speaker_str)
+    table.add_row("Gain", f"{block.gain_db:+.1f} dB")
+    table.add_row("Delay", f"{block.delay_ms:.2f} ms")
     table.add_row("HPF freq", hpf_str)
-    table.add_row(
-        "HPF slope",
-        _SLOPE_NAMES.get(block.hpf_slope_byte, f"0x{block.hpf_slope_byte:02x} (unknown)"),
-    )
+    table.add_row("HPF slope", _slope_type(block.hpf_slope_byte, block.hpf_type_byte))
     table.add_row("LPF freq", lpf_str)
-    table.add_row(
-        "LPF slope",
-        _SLOPE_NAMES.get(block.lpf_slope_byte, f"0x{block.lpf_slope_byte:02x} (unknown)"),
-    )
+    table.add_row("LPF slope", _slope_type(block.lpf_slope_byte, block.lpf_type_byte))
     table.add_row("EQ active bands", f"{len(active_eq)}" + ("" if active_eq else "  (flat)"))
     console.print(table)
 
