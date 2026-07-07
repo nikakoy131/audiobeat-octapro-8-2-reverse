@@ -32,7 +32,9 @@ src/octapro/
     constants.py       VID/PID, CMD codes, slope codes, EQ band table
     packet.py          build_read_channel, build_write_dsp, build_dsp_commit, compute_checksum
     channel.py         242-byte READ_BLOCK response decoder
-    dat.py             US002 .dat preset parser (10 × 238-byte blocks)
+    dat.py             US002 .dat preset parser (10 × 238-byte blocks; block
+                       fully decoded — routing[0:30], gain[30:34], delay[34:38],
+                       HPF/LPF freq+slope+type, speaker type[51], EQ[52:238])
     eq.py              31-band × 6-byte EQ block parser
     routing.py         32-byte routing matrix parser
     gain.py            byte ↔ dB, mute=0x80
@@ -44,6 +46,7 @@ src/octapro/
     read.py            read channel(s), decoded table output
     dump.py            raw hex + annotated hex of a block
     dat.py             parse-dat <file>
+    preset_io.py       import-dat / export-dat (full US002 round-trip)
     monitor.py         live poll loop, diff highlight
     probe.py           raw packet sender (--commit gate)
     write.py           write hpf / write gain (dry-run default)
