@@ -126,6 +126,11 @@ is mandatory after connect — otherwise READ_BLOCK returns a short `ee 55` refu
   `write master`, `write gain`, `write delay`. Builders:
   `build_write_master_volume`, `build_channel_gain`, `build_channel_delay`
   (shared `_build_volume_write`). See PROTOCOL.md "CMD 0x08 float-write family".
+  **Preset save/recall** also rides CMD 0x08 but sub-byte `0x06` (addr
+  `0x00b7`): byte[7]=`0x80|slot` saves, `slot` recalls (M1..M6); checksum
+  `(sum(pkt[4:11])-0x20)` at [11]. CLI `write preset-save`/`write
+  preset-recall`; builders `build_preset_save/recall`. See PROTOCOL.md
+  "Preset save / recall".
 - `0x1c` BRIDGE (sub `0x28`, addr `0x00b7`) — bridge CH7+CH8 (only bridgeable
   pair). Fixed 23-byte payload; state in byte[19] bit `0x80`, checksum at
   byte[31] over `sum(pkt[4:31])`. CLI: `write bridge --on|--off`. Builder:
@@ -183,7 +188,6 @@ See `CONTEXT_USER.md → Still to Capture` for the priority-ordered list.
 Most DSP params are now solved (2026-07-06 via the uhid shim): master vol,
 faders, delay, mute, phase, bridge, 31-band EQ (gain/freq/Q), EQ pass/reset,
 HPF+LPF (freq/slope/type). High-priority remaining:
-- Preset save/recall (M1–M6)
 - EQ "reset all" variant (only per-channel reset captured)
 
 ## Analysis Tools (installed on this machine)
