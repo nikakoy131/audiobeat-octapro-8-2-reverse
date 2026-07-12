@@ -163,6 +163,60 @@ AES-256-CBC over the first 1024 bytes, remainder XOR `ord(appid[-2])`), then
 unpacked — the whole protocol lives in `app-service.js`. (Extractor kept in the
 scratchpad, not committed; the applet is third-party code.)
 
+## Live verification log (2026-07-12, at the car)
+
+Beyond the initial read/mute proof above, a longer live session further
+confirmed both the master-volume link and per-channel mute across multiple
+channels — all over BLE, all using the unchanged `octapro.protocol` builders.
+
+### Master volume verification
+
+Re-tested the RC-knob/CH0-register identity claim (PROTOCOL.md "Volume
+terminology") directly, rather than relying on the earlier USB-side inference:
+
+- **Watch** (`scripts/ble_watch_master_volume.py`): polled CH0 `[9:13]` every
+  1.5s for 30s while the physical RC knob was turned. The decoded value moved
+  in real time with the knob: `6.00 → 1.12 → −3.33 → −4.23 → −8.20 dB`. Direct
+  live observation, not a static cross-check.
+- **Write + panel confirm** (`scripts/ble_set_master_volume.py`): wrote CH0 to
+  knob step 25 (target −3.33 dB, an exact anchor in
+  `octapro.protocol.knob_vol.KNOB_CALIBRATION`) via `build_write_master_volume`
+  (CMD `0x08` sub `0x0c`). Readback matched the target exactly
+  (`e0 a2 08 00 b7 00 0c b8 1e 55 c0 8e` → −3.33 dB), and the user confirmed the
+  **RC panel display itself updated to show 25** — the write doesn't just move
+  the internal register, it drives the physical display. Repeated for knob step
+  35 (target +6.00 dB, the top-of-range anchor): readback matched exactly.
+- Conclusion: the link is **bidirectional** — knob→register (watched) and
+  register→panel (written and confirmed) — closing the loop the original
+  2026-07-05 USB-side finding left one-directional.
+
+### Per-channel mute, multiple channels
+
+`scripts/ble_mute_test.py`, each a self-reversing mute→hold→unmute with a live
+audible check and a block-diff readback:
+
+| Channel | Result | Note |
+|---|---|---|
+| CH1 | byte[29] 0→1→0, round-trip exact | first proof, see top of doc |
+| CH4 | byte[29] 0→1→0, round-trip exact | |
+| CH6 | byte[29] 0→1→0, round-trip exact, **5s hold** | user confirmed audible drop-out + return |
+| CH3 | byte[29] 0→1→0, round-trip exact, 5s hold | user confirmed audible; **CH3 = rear speaker** |
+| CH4 (again) | byte[29] 0→1→0, round-trip exact, 5s hold | user confirmed audible; **CH4 = rear speaker** |
+
+Every test restored the exact original 240-byte block afterward (verified by
+byte-for-byte diff, not just re-reading the mute flag).
+
+### Full device snapshot
+
+`scripts/ble_snapshot.py` — read-only dump of master + all 10 channels (gain,
+delay, HPF/LPF, speaker type, mute, EQ deviations, routing) to
+`research/device-snapshots/<timestamp>/{snapshot.json,summary.md}` (git-ignored
+— personal install data, not RE data). Used to guess the physical layout from
+crossover points + the routing L/R pattern; CH3/CH4 guessed as
+midbass/rear-adjacent and **confirmed by the user as the rear speakers** via the
+mute tests above. See the snapshot's `summary.md` for the full per-channel table
+and the reasoning notes.
+
 ## Remaining
 
 - ~~One live confirmation~~ — **done** (2026-07-12, `scripts/ble_probe.py`): CH1

@@ -151,9 +151,13 @@ is mandatory after connect — otherwise READ_BLOCK returns a short `ee 55` refu
   a distinct fixed structural template (`ROUTING_SUB_*`); others use the segB
   one-hot + 0x64 template. See PROTOCOL.md "Routing matrix write".
 
-**Master volume = one value per source, two controls** (resolved 2026-07-05): the
-software "Main" fader and the remote knob (0–35 steps) both show the CH0 block
-float [9:13] (= keepalive echo float); each input source stores its own level.
+**Master volume = one value per source, two controls** (resolved 2026-07-05,
+re-verified bidirectionally over BLE 2026-07-12): the software "Main" fader and
+the remote knob (0–35 steps) both show the CH0 block float [9:13] (= keepalive
+echo float); each input source stores its own level. Live BLE test watched the
+physical knob move the CH0 float in real time, and a BLE write to the float
+updated the RC panel's displayed step too — see PROTOCOL.md "Volume
+terminology" point 5 and docs/findings/BLE.md "Master volume verification".
 CLI: `read master` (CH0 block), `read knob-vol` (keepalive; also shows the input
 source — keepalive byte [11]: 0=high level, 1=low level, 2=opt, 3=USB AUDIO).
 CH0 block [27:31] float = factory noise gate (−88.0). **Noise gate write**
