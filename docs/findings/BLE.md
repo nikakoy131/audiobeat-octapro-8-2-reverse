@@ -154,10 +154,10 @@ On macOS the peripheral id is a per-host UUID (e.g.
 ## How this was obtained
 
 The device's only controller is a **WeChat mini-program** (appid
-`wxc3f96b3bc4135c0c`, OEM Guangzhou Nisson / Sennuopu). It cannot be pulled off
+`wx***redacted***`, OEM Guangzhou Nisson / Sennuopu). It cannot be pulled off
 Android without root (WeChat private storage), so it was extracted from **desktop
 WeChat on macOS**: opening the applet caches its package to
-`~/Library/Containers/com.tencent.xinWeChat/Data/Documents/app_data/radium/users/<uid>/applet/packages/wxc3f96b3bc4135c0c/2/__APP__.wxapkg`.
+`~/Library/Containers/com.tencent.xinWeChat/Data/Documents/app_data/radium/users/<uid>/applet/packages/wx***redacted***/2/__APP__.wxapkg`.
 The `.wxapkg` is encrypted (`V1MMWX` header); decrypted with the standard scheme
 (`key = PBKDF2-HMAC-SHA1(appid, "saltiest", 1000, 32)`, `iv = "the iv: 16 bytes"`,
 AES-256-CBC over the first 1024 bytes, remainder XOR `ord(appid[-2])`), then
