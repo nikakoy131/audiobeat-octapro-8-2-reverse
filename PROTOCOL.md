@@ -497,6 +497,18 @@ Evidence that they are the same value:
 4. The full 137-byte CH0 block from usb1.pcapng (vendor app running) differs
    from a live read only in the volume float and the [134] trailer byte —
    there is no second volume-like field anywhere in the readback.
+5. Re-verified independently over **BLE** (2026-07-12, `scripts/ble_watch_master_volume.py`):
+   polling CH0 [9:13] every 1.5s while turning the physical RC knob showed the
+   decoded value step in real time (6.00 → 1.12 → −3.33 → −4.23 → −8.20 dB) —
+   not just a static cross-check, but the register visibly tracking the knob
+   live. And the reverse also holds: **writing** CH0 [9:13] via BLE
+   (`build_write_master_volume`, CMD `0x08`) updates the **RC panel's displayed
+   step**, not just the internal register — confirmed by the user reading the
+   panel after a write to knob step 25 (target −3.33 dB, an exact
+   `knob_vol.KNOB_CALIBRATION` anchor). This is new evidence beyond point 3:
+   the link is bidirectional (knob→register *and* register→panel display),
+   not just knob→register. See `docs/findings/BLE.md` "Master volume
+   verification".
 
 Nuance: the register holds the *current source's* level — each input source
 remembers its own knob-vol (see *Input source readback* below).
