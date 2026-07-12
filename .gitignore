@@ -36,3 +36,6 @@ htmlcov/
 
 # macOS
 .DS_Store
+
+# Third-party WeChat applet sources (BLE reverse-engineering, kept local, not committed)
+research/

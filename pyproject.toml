@@ -18,6 +18,11 @@ dependencies = [
     "capstone>=5.0.7",
 ]
 
+[project.optional-dependencies]
+# Bluetooth LE research transport (macOS CoreBluetooth backend — no libusb/dongle).
+# Kept optional so the default USB-only install stays lean.
+ble = ["bleak>=0.22"]
+
 [project.scripts]
 octaproctl = "octapro.cli:app"
 
