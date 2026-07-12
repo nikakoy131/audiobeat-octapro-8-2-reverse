@@ -19,7 +19,7 @@ def run_monitor(interval: float = 0.5) -> int:
         SPEAKER_TYPE_NAMES,
     )
     from octapro.protocol.packet import InPacket, build_read_channel
-    from octapro.transport.hid import HidTransport
+    from octapro.transport import open_transport
 
     console = Console()
 
@@ -78,7 +78,7 @@ def run_monitor(interval: float = 0.5) -> int:
         return t
 
     try:
-        with HidTransport() as t:
+        with open_transport() as t:
             t.start_keepalive()
             snaps: dict[int, dict] = {}
             changed: set[int] = set()

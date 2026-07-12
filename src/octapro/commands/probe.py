@@ -30,10 +30,10 @@ def run_probe(hex_bytes: str, commit: bool) -> int:
         console.print("\n[yellow]DRY RUN[/yellow] — packet not sent. Add --commit to transmit.")
         return 0
 
-    from octapro.transport.hid import HidTransport
+    from octapro.transport import open_transport
 
     try:
-        with HidTransport() as t:
+        with open_transport() as t:
             cmd = raw[2]
             addr = int.from_bytes(raw[4:6], "little")
             sub = int.from_bytes(raw[6:8], "little")

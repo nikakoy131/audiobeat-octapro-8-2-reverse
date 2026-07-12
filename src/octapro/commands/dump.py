@@ -11,11 +11,11 @@ def run_dump_channel(channel: int, annotate: bool = False, no_keepalive: bool = 
 
     from octapro.logging import log_packet_in, log_packet_out
     from octapro.protocol.packet import InPacket, build_read_channel
-    from octapro.transport.hid import HidTransport
+    from octapro.transport import open_transport
 
     console = Console()
     try:
-        with HidTransport() as t:
+        with open_transport() as t:
             if not no_keepalive:
                 t.start_keepalive()
             pkt = build_read_channel(channel)

@@ -47,7 +47,7 @@ def _eq_bar(gain_db: float | None):
 
 
 def run_read_channel(channel: str, no_keepalive: bool = False) -> int:
-    from octapro.transport.hid import HidTransport
+    from octapro.transport import open_transport
 
     try:
         channels = list(range(1, 11)) if channel.lower() == "all" else [int(channel)]
@@ -59,7 +59,7 @@ def run_read_channel(channel: str, no_keepalive: bool = False) -> int:
         return 1
 
     try:
-        with HidTransport() as t:
+        with open_transport() as t:
             if not no_keepalive:
                 t.start_keepalive()
             # single-channel read gets the full 31-band EQ meter
@@ -79,11 +79,11 @@ def run_read_master(no_keepalive: bool = False) -> int:
     from octapro.logging import log_packet_in, log_packet_out, warn_unknown
     from octapro.protocol.channel import parse_master_block
     from octapro.protocol.packet import InPacket, build_read_channel
-    from octapro.transport.hid import HidTransport
+    from octapro.transport import open_transport
 
     console = Console()
     try:
-        with HidTransport() as t:
+        with open_transport() as t:
             if not no_keepalive:
                 t.start_keepalive()
             pkt = build_read_channel(0)
@@ -133,11 +133,11 @@ def run_read_knob_vol(no_keepalive: bool = False) -> int:
         parse_keepalive_knob_vol,
         parse_keepalive_source,
     )
-    from octapro.transport.hid import HidTransport
+    from octapro.transport import open_transport
 
     console = Console()
     try:
-        with HidTransport() as t:
+        with open_transport() as t:
             if not no_keepalive:
                 t.start_keepalive()
             pkt = build_keepalive()
