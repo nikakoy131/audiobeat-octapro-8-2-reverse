@@ -31,7 +31,8 @@ obtained") and confirmed against the amp on 2026-07-12, **both directions**:
    is reached (see "Response framing").
 
 That's the whole thing. Every `octapro.protocol` packet builder works unchanged;
-a `BleTransport` is just "write bytes to AE10, read notifications from AE02."
+`BleTransport` (`src/octapro/transport/ble.py`) is just "write bytes to AE10,
+read notifications from AE02" — see "`BleTransport` — shipped" below.
 
 ## Why the earlier black-box probes got silence
 
@@ -217,13 +218,26 @@ midbass/rear-adjacent and **confirmed by the user as the rear speakers** via the
 mute tests above. See the snapshot's `summary.md` for the full per-channel table
 and the reasoning notes.
 
-## Remaining
+## `BleTransport` — shipped
 
 - ~~One live confirmation~~ — **done** (2026-07-12, `scripts/ble_probe.py`): CH1
   read decoded to sane values (see status line).
-- **Implement `BleTransport`** (follow-up branch): a thin wrapper reusing the
-  existing `octapro.protocol` builders — write short packets to AE10 (with response),
-  reassemble AE02 notifications, expose the same `transact()` the CLI already uses.
-  Reads return the block at offset **6** (not USB's 8). `scripts/ble_probe.py` is the
-  reference for connect/subscribe/reassemble/decode.
+- ~~Implement `BleTransport`~~ — **done**, same branch:
+  `src/octapro/transport/ble.py` (plus the pure reassembly/normalization logic
+  in `src/octapro/transport/ble_frame.py`, unit-tested offline in
+  `tests/test_ble_frame.py`). It writes short packets to `AE10` (with
+  response), reassembles `AE02` notifications per the formula above, and
+  re-packs the result into the USB `InPacket` byte layout (prepending a
+  synthetic 2-byte status word) so every existing protocol parser decodes it
+  unchanged. `bleak` runs on its own asyncio event-loop thread so `transact()`
+  keeps the same synchronous contract as `HidTransport`. Every CLI command now
+  runs over either transport — `octaproctl ble scan` / `ble connect` discover
+  and remember a device, `--transport ble` overrides per-invocation. See
+  README.md "Transports". `scripts/ble_probe.py` / `scripts/ble_mute_test.py`
+  remain the original research scripts this was distilled from.
+- Note: the two live master-volume verification scripts referenced above
+  (`ble_watch_master_volume.py`, `ble_set_master_volume.py`) were one-shot and
+  not committed — their findings are recorded here and in PROTOCOL.md; use
+  `octaproctl read master --transport ble` / `write master --transport ble` to
+  reproduce them with the shipped CLI instead.
 - Optionally decode the CMD `0x90` car-preset table and the `01 fe` media namespace.

@@ -76,6 +76,15 @@ as a HID device at all (only interface 3, the media-key remote, does). libusb
 drives the unclaimed interface directly, exactly mirroring the vendor app's
 traffic.
 
+To talk to the device over Bluetooth LE instead, install the optional `ble`
+extra (pulls in `bleak`):
+
+```bash
+uv sync --extra ble
+```
+
+See [Transports](#transports) below.
+
 ### Install
 
 ```bash
@@ -181,15 +190,66 @@ octaproctl write routing --output N --levels "p1,...,p14" [--commit]    full 14-
 octaproctl write noise-gate get|set --db X|on|off [--commit]   noise gate (FACTORY-LOCKED)
 octaproctl write phase --channel N --invert|--normal [--commit]
 octaproctl write bridge --on|--off [--commit]         CH7+CH8 bridge
+octaproctl ble scan [--seconds N] [--all]             find the device's BLE peripheral
+octaproctl ble connect [ADDRESS] [--seconds N]        save a BLE device as the default transport
+octaproctl config show                                effective transport + config file path
+octaproctl config path                                print the config file path
+octaproctl config set-transport usb|ble               persist the default transport
 ```
 
-Global flags: `-v/--verbose`, `-q/--quiet`, `--log-file PATH`, `--no-keepalive`
+Global flags: `-v/--verbose`, `-q/--quiet`, `--log-file PATH`, `--no-keepalive`,
+`--transport usb|ble` (before the subcommand — see [Transports](#transports)),
+`--address TEXT` (BLE peripheral address override, use with `--transport ble`)
 
 ### Read-Only by Default
 
 Every write command defaults to **dry-run**:  
 it builds the packet, prints the hex + intent, and exits — without touching the device.  
 Add `--commit` to actually transmit.
+
+### Transports
+
+`octaproctl` talks to the device over USB HID (default) or Bluetooth LE — both
+carry the identical `e0 a2 …` protocol (see
+[`docs/findings/BLE.md`](docs/findings/BLE.md)), so every command works
+unchanged over either link.
+
+**Selecting a transport, in precedence order:**
+
+1. **Per-invocation override** — global flags placed *before* the subcommand:
+   ```bash
+   uv run octaproctl --transport ble read channel 1
+   uv run octaproctl --transport ble --address AA:BB:CC:DD:EE:FF write mute --channel 3 --commit
+   ```
+2. **Saved config** — set once, used by every subsequent command:
+   ```bash
+   uv run octaproctl ble scan                 # find the device (needs the `ble` extra)
+   uv run octaproctl ble connect               # scan + pick interactively, saves it
+   uv run octaproctl ble connect <address>     # or save a known address directly
+   uv run octaproctl config show               # confirm what's effective
+   uv run octaproctl config set-transport usb  # switch back to USB
+   ```
+3. **Default** — USB, device index 0, if nothing above applies.
+
+**Config file** (JSON, created by `ble connect`/`config set-transport`):
+
+| OS | Path |
+|---|---|
+| macOS | `~/Library/Application Support/octapro/config.json` |
+| Linux | `${XDG_CONFIG_HOME:-~/.config}/octapro/config.json` |
+
+```json
+{
+  "transport": "ble",
+  "ble": {"address": "AA:BB:CC:DD:EE:FF", "name": "AB OctaPro BLE"},
+  "usb": {"device_index": 0}
+}
+```
+
+BLE needs the `ble` extra (`uv sync --extra ble`) and, on macOS, a one-time
+Bluetooth permission grant for the terminal app hosting Python (System
+Settings → Privacy & Security → Bluetooth). The peripheral only accepts one
+central at a time — disconnect the phone/WeChat app first.
 
 ### Research Logging
 
@@ -263,6 +323,10 @@ GitHub Actions (`release.yml`) builds a wheel + sdist and attaches them to the R
 - [x] **Phase Inversion (0°/180°):** `write phase` (CMD `0x05` selector `0x02`, 2026-07-06).
 - [x] **Solo:** `write solo` — client-side macro (mutes all other channels), no device command (2026-07-06).
 - [x] **CH7+CH8 Bridging:** `write bridge` (CMD `0x1c`, 2026-07-06).
+- [x] **BLE Transport:** every command also runs over Bluetooth LE
+  (`BleTransport`, the `0xAE00` GATT bridge) — selected via `octaproctl ble
+  connect` / `--transport ble`, config persisted per-user; see
+  [Transports](#transports) (2026-07-12).
 
 ### Crossover & Equalizer — DONE
 - [x] **HPF + LPF** — frequency, slope (all 8 steps 6–48 dB/oct), filter type (LR/Bessel/Butterworth).
@@ -294,8 +358,10 @@ The device protocol itself is done; these are directions for what to build *on t
   characteristic `0xAE10`, responses via notifications on `0xAE02`, after the same
   session-open packet. The advertised HID service `0x1812` is an OS-reserved red
   herring the applet never uses. **Live-verified 2026-07-12** — a channel read over
-  BLE decodes with the unchanged `parse_channel_block`. A `BleTransport` is now just
-  a thin wrapper over the existing `octapro.protocol` builders (follow-up branch).
+  BLE decodes with the unchanged `parse_channel_block`. **`BleTransport` shipped**
+  (`src/octapro/transport/ble.py`, same branch): every CLI command now runs over
+  either USB or BLE, selected via `octaproctl ble connect` / `--transport ble` —
+  see [Transports](#transports).
 - **Cross-platform GUI, heavily tested.** Since this project has been almost
   entirely AI-assisted so far, lean into that for a GUI layer too: a
   Tauri/Flutter-style desktop+mobile front end over the existing Python

@@ -26,6 +26,7 @@ Work here is:
 ```
 src/octapro/
   cli.py               typer app — octaproctl binary
+  config.py            transport config (USB/BLE selection, JSON, per-OS path)
   logging.py           Rich console + JSONL research log + warn_unknown()
   errors.py            DeviceNotFound, TransportTimeout, ParseError, ChecksumMismatch
   protocol/
@@ -39,8 +40,13 @@ src/octapro/
     routing.py         32-byte routing matrix parser
     gain.py            byte ↔ dB, mute=0x80
   transport/
-    hid.py             HidTransport (pyusb, interface 4): open incl. session-open,
-                       transact = SET_REPORT+GET_REPORT pair (lock-protected), keepalive thread
+    __init__.py        open_transport() factory — USB/BLE selection via config.resolve_transport()
+    base.py             Transport Protocol + KeepaliveMixin (shared lock/keepalive-thread)
+    hid.py              HidTransport (pyusb, interface 4): open incl. session-open,
+                        transact = SET_REPORT+GET_REPORT pair (lock-protected), keepalive thread
+    ble.py               BleTransport (bleak, lazy import): AE00 GATT bridge, asyncio
+                        loop on a background thread, transact() reassembles AE02 notifications
+    ble_frame.py         pure (no bleak) BLE response reassembly/normalization helpers
   commands/
     info.py            handshake + firmware banner
     read.py            read channel(s), decoded table output
@@ -51,12 +57,17 @@ src/octapro/
     probe.py           raw packet sender (--commit gate)
     write.py           write hpf / write gain (dry-run default)
     decode_pcap.py     offline pcapng decode (tshark required)
+    ble.py             ble scan / ble connect (bleak, lazy import)
+    config_cmd.py      config show / path / set-transport
 tests/
   test_packet.py       checksum, packet builders
   test_channel.py      242-byte block decoder
   test_dat.py          real dsp_m2.dat parse (asserts CH7/8 LPF≈80Hz, CH5/6 LPF≈3500Hz)
   test_eq.py           31-band EQ parser
   test_gain.py         byte↔dB roundtrip incl. mute
+  test_ble_frame.py    BLE reassembly/normalization, offline (no bleak import)
+  test_config.py       config load/save, transport-resolution precedence
+  test_transport_factory.py   open_transport() selection, no device/bleak needed
 ```
 
 ## Key Files
@@ -206,6 +217,14 @@ pass, EQ reset (per-channel + all), HPF+LPF (freq/slope/type), input source
 save/recall (M1-M6), the factory-locked noise gate (get/set/on-off), and full
 `.dat` preset file round-trip (`preset show/import/export`; routing excluded
 from import, see PROTOCOL.md ".dat / import-export").
+
+**Transports:** every command above also runs over Bluetooth LE, not just USB
+(2026-07-12) — `BleTransport` (`transport/ble.py`) carries the identical
+protocol over the `0xAE00` GATT bridge (see PROTOCOL.md / `docs/findings/BLE.md`
+"CMD over BLE"). Selected via `octaproctl ble connect` / `--transport ble`,
+persisted in a per-user JSON config (`octapro.config`) — see README.md
+"Transports". Optionally still open: CMD `0x90` car-preset table, `01 fe`
+media/U-disk namespace.
 
 ## Analysis Tools (installed on this machine)
 

@@ -12,12 +12,12 @@ prevent the keepalive thread from interleaving with command reads.
 """
 
 import logging
-import threading
 from typing import Any
 
 from octapro.errors import DeviceNotFound, TransportTimeout
-from octapro.protocol.constants import KEEPALIVE_INTERVAL_S, PID, VID
-from octapro.protocol.packet import build_keepalive, build_session_open
+from octapro.protocol.constants import PID, VID
+from octapro.protocol.packet import build_session_open
+from octapro.transport.base import KeepaliveMixin
 
 log = logging.getLogger("octapro.transport")
 
@@ -33,13 +33,11 @@ _WVALUE_OUTPUT = 0x0200
 _WVALUE_INPUT = 0x0100
 
 
-class HidTransport:
+class HidTransport(KeepaliveMixin):
     def __init__(self, device_index: int = 0) -> None:
+        super().__init__()
         self._dev: Any = None
         self._device_index = device_index
-        self._lock = threading.Lock()
-        self._stop = threading.Event()
-        self._ka_thread: threading.Thread | None = None
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -85,10 +83,7 @@ class HidTransport:
         log.debug("Session open ack: %s", resp[:4].hex(" "))
 
     def close(self) -> None:
-        self._stop.set()
-        if self._ka_thread:
-            self._ka_thread.join(timeout=2.0)
-            self._ka_thread = None
+        self._stop_keepalive()
         if self._dev:
             import usb.util as _util
 
@@ -128,28 +123,3 @@ class HidTransport:
         if not len(data):
             raise TransportTimeout("Empty GET_REPORT response from device")
         return bytes(data)
-
-    # ------------------------------------------------------------------
-    # Keepalive
-    # ------------------------------------------------------------------
-
-    def start_keepalive(self) -> None:
-        """Start background thread that sends keepalive every ~450 ms."""
-        pkt = bytes(build_keepalive())
-        self._stop.clear()
-
-        def _loop() -> None:
-            while not self._stop.wait(KEEPALIVE_INTERVAL_S):
-                try:
-                    self.transact(pkt)
-                    log.debug("Keepalive sent")
-                except TransportTimeout:
-                    log.warning("Keepalive: no response — device may have disconnected")
-                except Exception as exc:
-                    log.warning("Keepalive error: %s", exc)
-
-        self._ka_thread = threading.Thread(
-            target=_loop, daemon=True, name="octapro-keepalive"
-        )
-        self._ka_thread.start()
-        log.debug("Keepalive thread started (interval=%.2fs)", KEEPALIVE_INTERVAL_S)

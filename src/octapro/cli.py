@@ -24,10 +24,16 @@ preset_app = typer.Typer(
     help="Manage presets — .dat files (show/import/export) and device slots M1-M6 (save/recall).",
     no_args_is_help=True,
 )
+ble_app = typer.Typer(
+    help="Discover and connect to the device over Bluetooth LE.", no_args_is_help=True
+)
+config_app = typer.Typer(help="View/manage the saved transport config.", no_args_is_help=True)
 
 app.add_typer(read_app, name="read")
 app.add_typer(write_app, name="write")
 app.add_typer(preset_app, name="preset")
+app.add_typer(ble_app, name="ble")
+app.add_typer(config_app, name="config")
 
 # ---------------------------------------------------------------------------
 # Shared option types
@@ -59,7 +65,7 @@ def _version_cb(value: bool) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Root callback (--version only)
+# Root callback (--version, --transport/--address override)
 # ---------------------------------------------------------------------------
 
 @app.callback()
@@ -70,8 +76,28 @@ def _root(
             "--version", callback=_version_cb, is_eager=True, help="Show version and exit."
         ),
     ] = None,
+    transport: Annotated[
+        str | None,
+        typer.Option(
+            "--transport",
+            help="Force the transport for this invocation only: usb or ble "
+            "(overrides the saved config — see `octaproctl config show`).",
+        ),
+    ] = None,
+    address: Annotated[
+        str | None,
+        typer.Option(
+            "--address",
+            help="BLE peripheral address/UUID to use with --transport ble "
+            "(overrides the saved config).",
+        ),
+    ] = None,
 ) -> None:
-    pass
+    if transport is not None and transport not in ("usb", "ble"):
+        typer.echo("--transport must be 'usb' or 'ble'", err=True)
+        raise typer.Exit(1)
+    from octapro.transport import set_override
+    set_override(transport, address)
 
 
 # ---------------------------------------------------------------------------
@@ -719,3 +745,69 @@ def write_bridge(
     _setup(verbose, quiet, log_file)
     from octapro.commands.write import run_write_bridge
     sys.exit(run_write_bridge(bridged=on, commit=commit, no_keepalive=no_keepalive))
+
+
+# ---------------------------------------------------------------------------
+# ble sub-app — discover + remember a BLE device (requires `uv sync --extra ble`)
+# ---------------------------------------------------------------------------
+
+@ble_app.command(name="scan")
+def ble_scan(
+    seconds: Annotated[float, typer.Option("--seconds", help="Scan duration.")] = 8.0,
+    show_all: Annotated[
+        bool, typer.Option("--all", help="List every BLE peripheral, not just the device.")
+    ] = False,
+    verbose: _Verbose = False,
+    quiet: _Quiet = False,
+    log_file: _LogFile = None,
+) -> None:
+    """Scan for the device's BLE peripheral (`AB OctaPro BLE`)."""
+    _setup(verbose, quiet, log_file)
+    from octapro.commands.ble import run_ble_scan
+    sys.exit(run_ble_scan(seconds=seconds, show_all=show_all))
+
+
+@ble_app.command(name="connect")
+def ble_connect(
+    address: Annotated[
+        str | None,
+        typer.Argument(help="Peripheral address/UUID. Omit to scan and pick interactively."),
+    ] = None,
+    seconds: Annotated[
+        float, typer.Option("--seconds", help="Scan duration when no address is given.")
+    ] = 8.0,
+    verbose: _Verbose = False,
+    quiet: _Quiet = False,
+    log_file: _LogFile = None,
+) -> None:
+    """Save a BLE device as the default transport (see `octaproctl config show`)."""
+    _setup(verbose, quiet, log_file)
+    from octapro.commands.ble import run_ble_connect
+    sys.exit(run_ble_connect(address=address, seconds=seconds))
+
+
+# ---------------------------------------------------------------------------
+# config sub-app — inspect/manage the saved transport config
+# ---------------------------------------------------------------------------
+
+@config_app.command(name="show")
+def config_show() -> None:
+    """Print the effective transport selection and the config file path."""
+    from octapro.commands.config_cmd import run_config_show
+    sys.exit(run_config_show())
+
+
+@config_app.command(name="path")
+def config_show_path() -> None:
+    """Print the config file path."""
+    from octapro.commands.config_cmd import run_config_path
+    sys.exit(run_config_path())
+
+
+@config_app.command(name="set-transport")
+def config_set_transport(
+    transport: Annotated[str, typer.Argument(help="Default transport: usb or ble.")],
+) -> None:
+    """Persist the default transport (usb or ble) to the config file."""
+    from octapro.commands.config_cmd import run_config_set_transport
+    sys.exit(run_config_set_transport(transport=transport))

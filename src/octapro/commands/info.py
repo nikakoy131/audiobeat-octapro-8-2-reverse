@@ -12,12 +12,12 @@ def run_info(no_keepalive: bool = False) -> int:
     from octapro.logging import log_packet_in, log_packet_out, research, warn_unknown
     from octapro.protocol.constants import REG_FIRMWARE, REG_INIT
     from octapro.protocol.packet import InPacket, build_write_param
-    from octapro.transport.hid import HidTransport
+    from octapro.transport import open_transport
 
     console = Console()
 
     try:
-        with HidTransport() as t:
+        with open_transport() as t:
             research("session_start", app_version=__version__)
 
             # Init param (CMD 0x04 reg=0x9909)
