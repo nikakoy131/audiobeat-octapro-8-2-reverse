@@ -301,9 +301,9 @@ GitHub Actions (`release.yml`) builds a wheel + sdist and attaches them to the R
 | [`docs/LINUX_UHID_SHIM_PLAN.md`](docs/LINUX_UHID_SHIM_PLAN.md) | The `uhid` virtual-amplifier capture rig (how the write commands were found) |
 | [`docs/HID_DESCRIPTORS.md`](docs/HID_DESCRIPTORS.md) | Live-dumped USB config + interface-4 HID report descriptors |
 
-## Project Roadmap (USB CLI App)
+## Project Roadmap (CLI App)
 
-### Completed Features (Read/Write over USB)
+### Completed Features (Read/Write over USB and BLE)
 - [x] **Handshake & Session Setup:** Connection probes and mandatory session-open sequencing.
 - [x] **Hardware Transport:** PyUSB interface claiming & SET_REPORT/GET_REPORT on Interface 4.
 - [x] **Master Volume Extraction:** Read master block (CH0) and knob volume from keepalive echoes.
@@ -343,34 +343,24 @@ GitHub Actions (`release.yml`) builds a wheel + sdist and attaches them to the R
 
 ### Future Ideas (exploratory — not scoped or started)
 
-The device protocol itself is done; these are directions for what to build *on top of* it.
+The device protocol itself is done, and it's now reachable over both USB and
+BLE (see [Transports](#transports)); these are directions for what to build
+*on top of* that.
 
-- **Control over Bluetooth, not just USB.** The vendor Windows app has a
-  `CommunicationWorkerFactory` abstraction with four transport backends —
-  `CommunicationWHidWorker` (USB HID), `CommunicationBleWorker`,
-  `CommunicationComWorker` (serial), `CommunicationTcpWorker` — see
-  [`docs/findings/EXE.md`](docs/findings/EXE.md) "Communication layer". So BLE
-  control is architecturally real on the app side. **SOLVED 2026-07-12** (branch
-  `feat/ble-discovery`, see [`docs/findings/BLE.md`](docs/findings/BLE.md)): the
-  BLE link carries the **identical `e0 a2 …` protocol as USB** — same commands,
-  checksum, and float encoding — recovered from the WeChat mini-program's own JS.
-  Transport: service `0xAE00`, write commands (short, unpadded, with response) to
-  characteristic `0xAE10`, responses via notifications on `0xAE02`, after the same
-  session-open packet. The advertised HID service `0x1812` is an OS-reserved red
-  herring the applet never uses. **Live-verified 2026-07-12** — a channel read over
-  BLE decodes with the unchanged `parse_channel_block`. **`BleTransport` shipped**
-  (`src/octapro/transport/ble.py`, same branch): every CLI command now runs over
-  either USB or BLE, selected via `octaproctl ble connect` / `--transport ble` —
-  see [Transports](#transports).
 - **Cross-platform GUI, heavily tested.** Since this project has been almost
   entirely AI-assisted so far, lean into that for a GUI layer too: a
   Tauri/Flutter-style desktop+mobile front end over the existing Python
   protocol/`octaproctl` layer, backed by a much larger automated test suite
   (golden-packet tests, property-based encoding tests, `.dat` round-trip
   contract tests) rather than manual QA carrying the correctness burden.
-- **Android app.** Depends on solving a control transport Android can use —
-  either BLE (see above) or USB-OTG host mode replaying the same control
-  packets `octaproctl` sends today. Worth scoping both before committing to one.
+- **Android app.** The control-transport question is now settled — BLE is
+  live-verified and carries the identical `e0 a2 …` protocol as USB (see
+  [`docs/findings/BLE.md`](docs/findings/BLE.md)), so this is no longer
+  "figure out if BLE or USB-OTG can even work," just "port/reuse the protocol
+  layer" — either a from-scratch Kotlin implementation against Android's own
+  BLE APIs (same GATT recipe: service `0xAE00`, write `0xAE10`, notify
+  `0xAE02`), or bundling the existing Python `protocol`/`transport` package
+  (Chaquopy, or similar) and skipping the reimplementation entirely.
 - **User-friendly UI with speaker layout mapped to channels.** A visual mixer
   showing each channel by its physical role (front-left tweeter, sub, etc.)
   instead of a bare channel number, using the already-decoded `speaker_type`
@@ -381,6 +371,13 @@ The device protocol itself is done; these are directions for what to build *on t
   into a REW-importable format.
 - **RC-knob control from an external Android device.** Use a phone as a
   wireless remote for master volume (mirrors the physical rotary remote /
-  `read knob-vol`), instead of the hardware knob. Depends on the same control-
-  transport question as the Android app above.
+  `read knob-vol`), instead of the hardware knob. Easier now than when this was
+  first scoped — the master-volume float write is live-verified over BLE in
+  both directions (knob → register watched, register → panel written and
+  confirmed; see `docs/findings/BLE.md` "Master volume verification") — same
+  transport-porting work as the Android app idea above.
+- **Decode the CMD `0x90` per-car-model EQ preset table and the `01 fe`
+  media/U-disk command namespace.** Both surfaced while reading the BLE
+  applet's JS (see `docs/findings/BLE.md` "Bonus finds") but are unrelated to
+  DSP control and were left unexplored.
 
