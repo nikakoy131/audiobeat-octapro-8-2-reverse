@@ -11,10 +11,12 @@ def _build_block(
     gain_db: float = -6.0,
     delay_ms: float = 1.5,
     speaker_type: int = 0x06,
+    muted: bool = False,
 ) -> bytes:
     data = bytearray(BLOCK_LEN)
     data[0] = 0x00  # prefix
-    # routing [1:31] — zeros (all muted)
+    # routing [1:31] — zeros (no inputs routed); byte 29 doubles as the mute flag
+    data[29] = 1 if muted else 0
     struct.pack_into("<f", data, 31, gain_db)
     struct.pack_into("<f", data, 35, delay_ms)
     struct.pack_into("<f", data, 39, hpf_hz)
@@ -94,6 +96,16 @@ class TestParseChannelBlock:
         assert block.gain_db == -10.0
         assert block.delay_ms == 2.5
         assert block.speaker_type_byte == 0x01
+
+    def test_muted_flag_set(self):
+        raw = _build_block(muted=True)
+        block = parse_channel_block(raw, ch=1)
+        assert block.muted is True
+
+    def test_muted_flag_clear(self):
+        raw = _build_block(muted=False)
+        block = parse_channel_block(raw, ch=1)
+        assert block.muted is False
 
 
 class TestParseMasterBlock:

@@ -12,6 +12,7 @@ WarnFn = Callable[[str, object, str], None]
 
 BLOCK_LEN = 242
 EQ_BLOCK_OFFSET = 53  # byte 53 of the data payload
+MUTE_FLAG_OFFSET = 29  # 0 = unmuted, 1 = muted (docs/findings/BLE.md "Per-channel mute")
 
 MASTER_BLOCK_LEN = 137
 MASTER_VOLUME_OFFSET = 9    # float32 LE, same value the keepalive echoes
@@ -81,6 +82,7 @@ class ChannelBlock:
     lpf_type_byte: int
     speaker_type_byte: int
     eq_bands: list[EqBand]
+    muted: bool
     # Bytes not yet understood — logged for research
     unknown_bytes: dict[str, str] = field(default_factory=dict)
 
@@ -96,7 +98,11 @@ def parse_channel_block(
     Block layout (= .dat block shifted +1; hidden fields decoded & verified
     2026-07-06 against an app export with known CH1 gain/delay/speaker type):
       [0]       prefix 0x00
-      [1:31]    routing matrix (30 bytes, device read-format)
+      [1:31]    routing matrix (30 bytes, device read-format); byte 29 within
+                this range doubles as the MUTE flag (0=unmuted, 1=muted) —
+                live-verified over BLE on CH1/CH3/CH4/CH6, docs/findings/BLE.md
+                "Per-channel mute". Byte 239 is a trailing block checksum that
+                tracks it but is not decoded here.
       [31:35]   float32 LE per-channel GAIN (dB)
       [35:39]   float32 LE per-channel DELAY (ms)
       [39:43]   float32 LE HPF freq (Hz)
@@ -143,6 +149,8 @@ def parse_channel_block(
 
     speaker_type = _u8(52)
 
+    muted = _u8(MUTE_FLAG_OFFSET) == 1
+
     eq_bands = parse_eq_block(raw, offset=EQ_BLOCK_OFFSET, warn=warn)
 
     unknowns: dict[str, str] = {
@@ -165,5 +173,6 @@ def parse_channel_block(
         lpf_type_byte=lpf_type,
         speaker_type_byte=speaker_type,
         eq_bands=eq_bands,
+        muted=muted,
         unknown_bytes=unknowns,
     )
