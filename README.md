@@ -237,6 +237,7 @@ GitHub Actions (`release.yml`) builds a wheel + sdist and attaches them to the R
 | [`docs/findings/EXE.md`](docs/findings/EXE.md) | Analysis of the vendor Windows EXE (Qt/HID class structure) |
 | [`docs/findings/WIRESHARK.md`](docs/findings/WIRESHARK.md) | Analysis of `usb1.pcapng` and `usb2.pcapng` |
 | [`docs/findings/MANUAL_GAP.md`](docs/findings/MANUAL_GAP.md) | Gap analysis of the HIFI-X12 manual vs. reverse-engineered protocol |
+| [`docs/findings/BLE.md`](docs/findings/BLE.md) | Bluetooth LE control discovery — advertised HID-over-GATT + vendor serial bridge, and the macOS access wall |
 | [`docs/LINUX_UHID_SHIM_PLAN.md`](docs/LINUX_UHID_SHIM_PLAN.md) | The `uhid` virtual-amplifier capture rig (how the write commands were found) |
 | [`docs/HID_DESCRIPTORS.md`](docs/HID_DESCRIPTORS.md) | Live-dumped USB config + interface-4 HID report descriptors |
 
@@ -285,11 +286,16 @@ The device protocol itself is done; these are directions for what to build *on t
   `CommunicationWHidWorker` (USB HID), `CommunicationBleWorker`,
   `CommunicationComWorker` (serial), `CommunicationTcpWorker` — see
   [`docs/findings/EXE.md`](docs/findings/EXE.md) "Communication layer". So BLE
-  control is architecturally real on the app side. **Unverified:** whether
-  *this device* actually advertises a BLE peripheral for control, or whether
-  the "Bluetooth" in the source list (`write source --tier high --to bt`) is
-  audio-only (APTX-HD) with no control channel. Needs its own capture (e.g.
-  `btmon`/nRF Connect while pairing) before any protocol work starts.
+  control is architecturally real on the app side. **SOLVED 2026-07-12** (branch
+  `feat/ble-discovery`, see [`docs/findings/BLE.md`](docs/findings/BLE.md)): the
+  BLE link carries the **identical `e0 a2 …` protocol as USB** — same commands,
+  checksum, and float encoding — recovered from the WeChat mini-program's own JS.
+  Transport: service `0xAE00`, write commands (short, unpadded, with response) to
+  characteristic `0xAE10`, responses via notifications on `0xAE02`, after the same
+  session-open packet. The advertised HID service `0x1812` is an OS-reserved red
+  herring the applet never uses. **Live-verified 2026-07-12** — a channel read over
+  BLE decodes with the unchanged `parse_channel_block`. A `BleTransport` is now just
+  a thin wrapper over the existing `octapro.protocol` builders (follow-up branch).
 - **Cross-platform GUI, heavily tested.** Since this project has been almost
   entirely AI-assisted so far, lean into that for a GUI layer too: a
   Tauri/Flutter-style desktop+mobile front end over the existing Python
