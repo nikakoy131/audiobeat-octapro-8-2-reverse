@@ -76,6 +76,15 @@ as a HID device at all (only interface 3, the media-key remote, does). libusb
 drives the unclaimed interface directly, exactly mirroring the vendor app's
 traffic.
 
+To talk to the device over Bluetooth LE instead, install the optional `ble`
+extra (pulls in `bleak`):
+
+```bash
+uv sync --extra ble
+```
+
+See [Transports](#transports) below.
+
 ### Install
 
 ```bash
@@ -181,15 +190,66 @@ octaproctl write routing --output N --levels "p1,...,p14" [--commit]    full 14-
 octaproctl write noise-gate get|set --db X|on|off [--commit]   noise gate (FACTORY-LOCKED)
 octaproctl write phase --channel N --invert|--normal [--commit]
 octaproctl write bridge --on|--off [--commit]         CH7+CH8 bridge
+octaproctl ble scan [--seconds N] [--all]             find the device's BLE peripheral
+octaproctl ble connect [ADDRESS] [--seconds N]        save a BLE device as the default transport
+octaproctl config show                                effective transport + config file path
+octaproctl config path                                print the config file path
+octaproctl config set-transport usb|ble               persist the default transport
 ```
 
-Global flags: `-v/--verbose`, `-q/--quiet`, `--log-file PATH`, `--no-keepalive`
+Global flags: `-v/--verbose`, `-q/--quiet`, `--log-file PATH`, `--no-keepalive`,
+`--transport usb|ble` (before the subcommand — see [Transports](#transports)),
+`--address TEXT` (BLE peripheral address override, use with `--transport ble`)
 
 ### Read-Only by Default
 
 Every write command defaults to **dry-run**:  
 it builds the packet, prints the hex + intent, and exits — without touching the device.  
 Add `--commit` to actually transmit.
+
+### Transports
+
+`octaproctl` talks to the device over USB HID (default) or Bluetooth LE — both
+carry the identical `e0 a2 …` protocol (see
+[`docs/findings/BLE.md`](docs/findings/BLE.md)), so every command works
+unchanged over either link.
+
+**Selecting a transport, in precedence order:**
+
+1. **Per-invocation override** — global flags placed *before* the subcommand:
+   ```bash
+   uv run octaproctl --transport ble read channel 1
+   uv run octaproctl --transport ble --address AA:BB:CC:DD:EE:FF write mute --channel 3 --commit
+   ```
+2. **Saved config** — set once, used by every subsequent command:
+   ```bash
+   uv run octaproctl ble scan                 # find the device (needs the `ble` extra)
+   uv run octaproctl ble connect               # scan + pick interactively, saves it
+   uv run octaproctl ble connect <address>     # or save a known address directly
+   uv run octaproctl config show               # confirm what's effective
+   uv run octaproctl config set-transport usb  # switch back to USB
+   ```
+3. **Default** — USB, device index 0, if nothing above applies.
+
+**Config file** (JSON, created by `ble connect`/`config set-transport`):
+
+| OS | Path |
+|---|---|
+| macOS | `~/Library/Application Support/octapro/config.json` |
+| Linux | `${XDG_CONFIG_HOME:-~/.config}/octapro/config.json` |
+
+```json
+{
+  "transport": "ble",
+  "ble": {"address": "AA:BB:CC:DD:EE:FF", "name": "AB OctaPro BLE"},
+  "usb": {"device_index": 0}
+}
+```
+
+BLE needs the `ble` extra (`uv sync --extra ble`) and, on macOS, a one-time
+Bluetooth permission grant for the terminal app hosting Python (System
+Settings → Privacy & Security → Bluetooth). The peripheral only accepts one
+central at a time — disconnect the phone/WeChat app first.
 
 ### Research Logging
 
@@ -237,12 +297,13 @@ GitHub Actions (`release.yml`) builds a wheel + sdist and attaches them to the R
 | [`docs/findings/EXE.md`](docs/findings/EXE.md) | Analysis of the vendor Windows EXE (Qt/HID class structure) |
 | [`docs/findings/WIRESHARK.md`](docs/findings/WIRESHARK.md) | Analysis of `usb1.pcapng` and `usb2.pcapng` |
 | [`docs/findings/MANUAL_GAP.md`](docs/findings/MANUAL_GAP.md) | Gap analysis of the HIFI-X12 manual vs. reverse-engineered protocol |
+| [`docs/findings/BLE.md`](docs/findings/BLE.md) | Bluetooth LE control discovery — advertised HID-over-GATT + vendor serial bridge, and the macOS access wall |
 | [`docs/LINUX_UHID_SHIM_PLAN.md`](docs/LINUX_UHID_SHIM_PLAN.md) | The `uhid` virtual-amplifier capture rig (how the write commands were found) |
 | [`docs/HID_DESCRIPTORS.md`](docs/HID_DESCRIPTORS.md) | Live-dumped USB config + interface-4 HID report descriptors |
 
-## Project Roadmap (USB CLI App)
+## Project Roadmap (CLI App)
 
-### Completed Features (Read/Write over USB)
+### Completed Features (Read/Write over USB and BLE)
 - [x] **Handshake & Session Setup:** Connection probes and mandatory session-open sequencing.
 - [x] **Hardware Transport:** PyUSB interface claiming & SET_REPORT/GET_REPORT on Interface 4.
 - [x] **Master Volume Extraction:** Read master block (CH0) and knob volume from keepalive echoes.
@@ -262,6 +323,10 @@ GitHub Actions (`release.yml`) builds a wheel + sdist and attaches them to the R
 - [x] **Phase Inversion (0°/180°):** `write phase` (CMD `0x05` selector `0x02`, 2026-07-06).
 - [x] **Solo:** `write solo` — client-side macro (mutes all other channels), no device command (2026-07-06).
 - [x] **CH7+CH8 Bridging:** `write bridge` (CMD `0x1c`, 2026-07-06).
+- [x] **BLE Transport:** every command also runs over Bluetooth LE
+  (`BleTransport`, the `0xAE00` GATT bridge) — selected via `octaproctl ble
+  connect` / `--transport ble`, config persisted per-user; see
+  [Transports](#transports) (2026-07-12).
 
 ### Crossover & Equalizer — DONE
 - [x] **HPF + LPF** — frequency, slope (all 8 steps 6–48 dB/oct), filter type (LR/Bessel/Butterworth).
@@ -278,27 +343,24 @@ GitHub Actions (`release.yml`) builds a wheel + sdist and attaches them to the R
 
 ### Future Ideas (exploratory — not scoped or started)
 
-The device protocol itself is done; these are directions for what to build *on top of* it.
+The device protocol itself is done, and it's now reachable over both USB and
+BLE (see [Transports](#transports)); these are directions for what to build
+*on top of* that.
 
-- **Control over Bluetooth, not just USB.** The vendor Windows app has a
-  `CommunicationWorkerFactory` abstraction with four transport backends —
-  `CommunicationWHidWorker` (USB HID), `CommunicationBleWorker`,
-  `CommunicationComWorker` (serial), `CommunicationTcpWorker` — see
-  [`docs/findings/EXE.md`](docs/findings/EXE.md) "Communication layer". So BLE
-  control is architecturally real on the app side. **Unverified:** whether
-  *this device* actually advertises a BLE peripheral for control, or whether
-  the "Bluetooth" in the source list (`write source --tier high --to bt`) is
-  audio-only (APTX-HD) with no control channel. Needs its own capture (e.g.
-  `btmon`/nRF Connect while pairing) before any protocol work starts.
 - **Cross-platform GUI, heavily tested.** Since this project has been almost
   entirely AI-assisted so far, lean into that for a GUI layer too: a
   Tauri/Flutter-style desktop+mobile front end over the existing Python
   protocol/`octaproctl` layer, backed by a much larger automated test suite
   (golden-packet tests, property-based encoding tests, `.dat` round-trip
   contract tests) rather than manual QA carrying the correctness burden.
-- **Android app.** Depends on solving a control transport Android can use —
-  either BLE (see above) or USB-OTG host mode replaying the same control
-  packets `octaproctl` sends today. Worth scoping both before committing to one.
+- **Android app.** The control-transport question is now settled — BLE is
+  live-verified and carries the identical `e0 a2 …` protocol as USB (see
+  [`docs/findings/BLE.md`](docs/findings/BLE.md)), so this is no longer
+  "figure out if BLE or USB-OTG can even work," just "port/reuse the protocol
+  layer" — either a from-scratch Kotlin implementation against Android's own
+  BLE APIs (same GATT recipe: service `0xAE00`, write `0xAE10`, notify
+  `0xAE02`), or bundling the existing Python `protocol`/`transport` package
+  (Chaquopy, or similar) and skipping the reimplementation entirely.
 - **User-friendly UI with speaker layout mapped to channels.** A visual mixer
   showing each channel by its physical role (front-left tweeter, sub, etc.)
   instead of a bare channel number, using the already-decoded `speaker_type`
@@ -309,6 +371,13 @@ The device protocol itself is done; these are directions for what to build *on t
   into a REW-importable format.
 - **RC-knob control from an external Android device.** Use a phone as a
   wireless remote for master volume (mirrors the physical rotary remote /
-  `read knob-vol`), instead of the hardware knob. Depends on the same control-
-  transport question as the Android app above.
+  `read knob-vol`), instead of the hardware knob. Easier now than when this was
+  first scoped — the master-volume float write is live-verified over BLE in
+  both directions (knob → register watched, register → panel written and
+  confirmed; see `docs/findings/BLE.md` "Master volume verification") — same
+  transport-porting work as the Android app idea above.
+- **Decode the CMD `0x90` per-car-model EQ preset table and the `01 fe`
+  media/U-disk command namespace.** Both surfaced while reading the BLE
+  applet's JS (see `docs/findings/BLE.md` "Bonus finds") but are unrelated to
+  DSP control and were left unexplored.
 

@@ -87,11 +87,11 @@ def run_export_dat(path: Path, no_keepalive: bool = False) -> int:
     """Read all 10 channels from the device and write a US002 .dat file."""
     from octapro.logging import log_packet_in, log_packet_out
     from octapro.protocol.packet import InPacket, build_read_channel
-    from octapro.transport.hid import HidTransport
+    from octapro.transport import open_transport
 
     try:
         blocks: list[bytes] = []
-        with HidTransport() as t:
+        with open_transport() as t:
             if not no_keepalive:
                 t.start_keepalive()
             for ch in range(1, 11):
@@ -156,10 +156,10 @@ def run_import_dat(
         return 0
 
     from octapro.logging import log_packet_in, log_packet_out
-    from octapro.transport.hid import HidTransport
+    from octapro.transport import open_transport
 
     try:
-        with HidTransport() as t:
+        with open_transport() as t:
             if not no_keepalive:
                 t.start_keepalive()
             for _label, pkt in plan:

@@ -64,10 +64,10 @@ def run_write_crossover(
         _dry_run_print(intent, bytes(pkt))
         return 0
 
-    from octapro.transport.hid import HidTransport
+    from octapro.transport import open_transport
 
     try:
-        with HidTransport() as t:
+        with open_transport() as t:
             if not no_keepalive:
                 t.start_keepalive()
             log_packet_out(0x0A, channel_addr(channel), sub, bytes(pkt))
@@ -107,10 +107,10 @@ def run_write_gain(
         _dry_run_print(intent, bytes(pkt))
         return 0
 
-    from octapro.transport.hid import HidTransport
+    from octapro.transport import open_transport
 
     try:
-        with HidTransport() as t:
+        with open_transport() as t:
             if not no_keepalive:
                 t.start_keepalive()
             log_packet_out(
@@ -144,10 +144,10 @@ def run_write_mute(
         _dry_run_print(intent, bytes(pkt))
         return 0
 
-    from octapro.transport.hid import HidTransport
+    from octapro.transport import open_transport
 
     try:
-        with HidTransport() as t:
+        with open_transport() as t:
             if not no_keepalive:
                 t.start_keepalive()
             log_packet_out(CMD_READ_BLOCK, channel_addr(channel), pkt[6], bytes(pkt))
@@ -202,10 +202,10 @@ def run_write_noise_gate(
         return 0
 
     from octapro.logging import log_packet_in, log_packet_out
-    from octapro.transport.hid import HidTransport
+    from octapro.transport import open_transport
 
     try:
-        with HidTransport() as t:
+        with open_transport() as t:
             if not no_keepalive:
                 t.start_keepalive()
             log_packet_out(pkt[2], int.from_bytes(pkt[4:6], "little"), pkt[6], bytes(pkt))
@@ -248,10 +248,10 @@ def run_write_preset(
         _dry_run_print(intent, bytes(pkt))
         return 0
 
-    from octapro.transport.hid import HidTransport
+    from octapro.transport import open_transport
 
     try:
-        with HidTransport() as t:
+        with open_transport() as t:
             if not no_keepalive:
                 t.start_keepalive()
             log_packet_out(0x08, SESSION_OPEN_ADDR, SUB_PRESET, bytes(pkt))
@@ -307,10 +307,10 @@ def run_write_routing(
 
     console.print(table)
 
-    from octapro.transport.hid import HidTransport
+    from octapro.transport import open_transport
 
     try:
-        with HidTransport() as t:
+        with open_transport() as t:
             if not no_keepalive:
                 t.start_keepalive()
             log_packet_out(CMD_ROUTING, channel_addr(output_ch), 0, bytes(pkt))
@@ -365,10 +365,10 @@ def run_write_source(
         _dry_run_print(intent, bytes(pkt))
         return 0
 
-    from octapro.transport.hid import HidTransport
+    from octapro.transport import open_transport
 
     try:
-        with HidTransport() as t:
+        with open_transport() as t:
             if not no_keepalive:
                 t.start_keepalive()
             log_packet_out(CMD_READ_BLOCK, SESSION_OPEN_ADDR, pkt[6], bytes(pkt))
@@ -413,10 +413,10 @@ def run_write_speaker_type(
         _dry_run_print(intent, bytes(pkt))
         return 0
 
-    from octapro.transport.hid import HidTransport
+    from octapro.transport import open_transport
 
     try:
-        with HidTransport() as t:
+        with open_transport() as t:
             if not no_keepalive:
                 t.start_keepalive()
             log_packet_out(CMD_READ_BLOCK, channel_addr(channel), pkt[6], bytes(pkt))
@@ -486,10 +486,10 @@ def run_write_solo(
         )
         return 0
 
-    from octapro.transport.hid import HidTransport
+    from octapro.transport import open_transport
 
     try:
-        with HidTransport() as t:
+        with open_transport() as t:
             if not no_keepalive:
                 t.start_keepalive()
             for ch, pkt in packets:
@@ -524,10 +524,10 @@ def run_write_eq(
         _dry_run_print(intent, bytes(pkt))
         return 0
 
-    from octapro.transport.hid import HidTransport
+    from octapro.transport import open_transport
 
     try:
-        with HidTransport() as t:
+        with open_transport() as t:
             if not no_keepalive:
                 t.start_keepalive()
             log_packet_out(CMD_WRITE_DSP, channel_addr(channel), pkt[6], bytes(pkt))
@@ -558,10 +558,10 @@ def run_write_delay(
         _dry_run_print(intent, bytes(pkt))
         return 0
 
-    from octapro.transport.hid import HidTransport
+    from octapro.transport import open_transport
 
     try:
-        with HidTransport() as t:
+        with open_transport() as t:
             if not no_keepalive:
                 t.start_keepalive()
             log_packet_out(
@@ -594,10 +594,10 @@ def run_write_eq_pass(
         _dry_run_print(intent, bytes(pkt))
         return 0
 
-    from octapro.transport.hid import HidTransport
+    from octapro.transport import open_transport
 
     try:
-        with HidTransport() as t:
+        with open_transport() as t:
             if not no_keepalive:
                 t.start_keepalive()
             log_packet_out(CMD_READ_BLOCK, channel_addr(channel), SUB_EQ_PASS, bytes(pkt))
@@ -632,10 +632,10 @@ def run_write_eq_reset(
         _dry_run_print(intent, bytes(pkt))
         return 0
 
-    from octapro.transport.hid import HidTransport
+    from octapro.transport import open_transport
 
     try:
-        with HidTransport() as t:
+        with open_transport() as t:
             if not no_keepalive:
                 t.start_keepalive()
             log_packet_out(CMD_READ_BLOCK, channel_addr(0), SUB_EQ_PASS, bytes(pkt))
@@ -666,10 +666,10 @@ def run_write_phase(
         _dry_run_print(intent, bytes(pkt))
         return 0
 
-    from octapro.transport.hid import HidTransport
+    from octapro.transport import open_transport
 
     try:
-        with HidTransport() as t:
+        with open_transport() as t:
             if not no_keepalive:
                 t.start_keepalive()
             log_packet_out(CMD_READ_BLOCK, channel_addr(channel), pkt[6], bytes(pkt))
@@ -699,10 +699,10 @@ def run_write_bridge(
         _dry_run_print(intent, bytes(pkt))
         return 0
 
-    from octapro.transport.hid import HidTransport
+    from octapro.transport import open_transport
 
     try:
-        with HidTransport() as t:
+        with open_transport() as t:
             if not no_keepalive:
                 t.start_keepalive()
             log_packet_out(CMD_BRIDGE, channel_addr(0), SUB_BRIDGE, bytes(pkt))
@@ -732,10 +732,10 @@ def run_write_master(
         _dry_run_print(intent, bytes(pkt))
         return 0
 
-    from octapro.transport.hid import HidTransport
+    from octapro.transport import open_transport
 
     try:
-        with HidTransport() as t:
+        with open_transport() as t:
             if not no_keepalive:
                 t.start_keepalive()
             log_packet_out(0x08, channel_addr(0), SUB_MASTER_VOLUME, bytes(pkt))
