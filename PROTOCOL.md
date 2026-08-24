@@ -741,6 +741,23 @@ UI — but the **device applies the preset on this single 0x08 packet**. Builder
 `packet.build_preset_save(slot)` / `build_preset_recall(slot)`; CLI `preset
 save --slot N` / `preset recall --slot N`.
 
+**Scope of what recall restores (LIVE-CONFIRMED 2026-08-24): mute and EQ-pass
+are NOT part of the preset — they're independent runtime toggles.** Test: with
+CH1-4 muted and CH5-8 unmuted live (unrelated to either slot's saved content),
+recalled M2 then M3 in sequence — gain, delay, HPF/LPF, speaker type, and EQ
+band content all correctly switched to match each slot on every recall
+(confirmed via full channel readback), but the **mute pattern from before the
+first recall persisted unchanged through both recalls**. Same story for
+EQ-pass: nothing in either recall re-engaged a channel that had been left
+EQ-bypassed live. This matches `preset_io.py`'s existing note that `.dat`
+import/export also excludes routing — the pattern holds more broadly: **only
+per-channel gain/delay/HPF/LPF/speaker-type/EQ round-trip through a
+preset (file or M-slot); mute, EQ-pass, and routing are all live-only state
+a recall does not touch.** Practical implication: after any `preset recall`,
+explicitly re-set mute/EQ-pass to the desired state — don't assume the recalled
+slot's channels come back unmuted/EQ-engaged just because that's how they were
+when the slot was saved.
+
 ### Routing matrix write — SOLVED 2026-07-06 (CMD 0x20, per output row)
 
 The crosspoint mixer is a new opcode **`0x20`**, **one packet per output

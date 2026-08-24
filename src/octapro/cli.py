@@ -339,7 +339,13 @@ def preset_recall(
     quiet: _Quiet = False,
     log_file: _LogFile = None,
 ) -> None:
-    """Recall (load) a preset slot (M1-M6) onto the device. **Dry-run unless `--commit`.**"""
+    """Recall (load) a preset slot (M1-M6) onto the device. **Dry-run unless `--commit`.**
+
+    Restores gain, delay, HPF/LPF, speaker type, and EQ — **not** mute,
+    EQ-pass, or routing, which are live-only state a recall never touches.
+    A channel muted or EQ-bypassed before the recall stays that way after it,
+    regardless of what the slot was saved with. Re-set those explicitly if
+    the slot's channels need to come back unmuted/EQ-engaged."""
     _setup(verbose, quiet, log_file)
     from octapro.commands.write import run_write_preset
     sys.exit(run_write_preset(slot=slot, save=False, commit=commit, no_keepalive=no_keepalive))
