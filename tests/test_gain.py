@@ -74,11 +74,12 @@ class TestEqBar:
         assert boost[13:25] == "█" * 12 and len(boost) == 25
         assert cut[0:12] == "█" * 12 and len(cut) == 25
 
-    def test_mute(self):
+    def test_small_boost_at_mute_byte_renders_as_a_bar(self):
+        """0x80 (+0.8 dB) is an ordinary band — no mute glyph. See gain.eq_byte_to_db."""
         from octapro.commands.read import _eq_bar
 
-        v = self._visible(_eq_bar(None))
-        assert len(v) == 25 and v[12] == "✕"
+        v = self._visible(_eq_bar(0.8))
+        assert len(v) == 25 and v[12] == "│" and "✕" not in v
 
 
 class TestDbToKnob:

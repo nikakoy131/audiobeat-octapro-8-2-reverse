@@ -56,3 +56,30 @@ class TestParseEqBlock:
         parse_eq_block(block, warn=lambda k, v, c: warned.append((k, v, c)))
         assert len(warned) == 1
         assert warned[0][0] == "eq_q_byte"
+
+
+def test_eq_band_0x80_is_plus_0p8_not_mute():
+    """0x80 is the channel-gain mute sentinel, but an ordinary +0.8 dB EQ band.
+
+    Regression: the live CH1/CH2 tweeter curve reads 8k=0x81 (+0.9),
+    10k=0x80, 12.5k=0x89 (+1.7). Decoding 0x80 as mute turned a smooth HF
+    shelf into an impossible infinite notch on both channels.
+    """
+    import struct
+
+    from octapro.protocol.eq import parse_eq_block
+
+    raw = b"".join(
+        struct.pack("<f", f) + bytes([g, 0x0A])
+        for f, g in [(8000.0, 0x81), (10000.0, 0x80), (12500.0, 0x89)]
+    )
+    bands = parse_eq_block(raw)
+    assert [round(b.gain_db, 1) for b in bands[:3]] == [0.9, 0.8, 1.7]
+
+
+def test_eq_gain_roundtrips_through_0x80():
+    """+0.8 dB must survive encode -> decode; it previously became MUTE/None."""
+    from octapro.protocol.gain import db_to_byte, eq_byte_to_db
+
+    assert db_to_byte(0.8) == 0x80
+    assert eq_byte_to_db(db_to_byte(0.8)) == 0.8

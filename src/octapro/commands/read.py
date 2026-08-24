@@ -13,7 +13,7 @@ def _fmt_freq(hz: float) -> str:
     return f"{hz / 1000:g}k" if hz >= 1000 else f"{hz:g}"
 
 
-def _eq_bar(gain_db: float | None):
+def _eq_bar(gain_db: float):
     """Exact-width Text bar: cut extends left (red), boost right (cyan), dim 0-line.
 
     Built as rich.Text, not markup — Rich trims trailing spaces off markup
@@ -23,11 +23,6 @@ def _eq_bar(gain_db: float | None):
 
     h = _EQ_HALF_CELLS
     t = Text()
-    if gain_db is None:
-        t.append(" " * h)
-        t.append("✕", style="red bold")
-        t.append(" " * h)
-        return t
     cells = min(h, round(abs(gain_db) / _EQ_MAX_DB * h))
     if gain_db > 0 and cells:
         t.append(" " * h)
@@ -203,7 +198,7 @@ def _read_and_print(transport, ch: int, show_eq: bool = False) -> None:
         else f"{block.lpf_freq_hz:.1f} Hz"
     )
     hpf_str = f"{block.hpf_freq_hz:.1f} Hz"
-    active_eq = [b for b in block.eq_bands if b.gain_db is not None and abs(b.gain_db) > 0.05]
+    active_eq = [b for b in block.eq_bands if abs(b.gain_db) > 0.05]
 
     def _slope_type(slope: int, ftype: int) -> str:
         slope_str = _SLOPE_NAMES.get(slope, f"0x{slope:02x} (unknown)")
@@ -249,8 +244,8 @@ def _print_eq_table(console, ch: int, bands) -> None:
     table.add_column("Q", justify="right")
 
     for b in bands:
-        flat = b.gain_db is not None and abs(b.gain_db) <= 0.05
-        gain_str = "MUTE" if b.gain_db is None else f"{b.gain_db:+.1f}"
+        flat = abs(b.gain_db) <= 0.05
+        gain_str = f"{b.gain_db:+.1f}"
         q_str = f"0x{b.q_byte:02x} (≈{b.q_byte / 10:.1f})"
         style = "dim" if flat else ""
         table.add_row(
