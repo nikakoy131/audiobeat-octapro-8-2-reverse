@@ -753,12 +753,30 @@ first recall persisted unchanged through both recalls**. Same story for
 EQ-pass: nothing in either recall re-engaged a channel that had been left
 EQ-bypassed live. This matches `preset_io.py`'s existing note that `.dat`
 import/export also excludes routing — the pattern holds more broadly: **only
-per-channel gain/delay/HPF/LPF/speaker-type/EQ round-trip through a
+per-channel gain/delay/HPF/LPF/speaker-type/EQ/phase round-trip through a
 preset (file or M-slot); mute, EQ-pass, and routing are all live-only state
 a recall does not touch.** Practical implication: after any `preset recall`,
 explicitly re-set mute/EQ-pass to the desired state — don't assume the recalled
 slot's channels come back unmuted/EQ-engaged just because that's how they were
 when the slot was saved.
+
+**Phase invert IS part of the preset (LIVE-CONFIRMED 2026-08-24).** This was
+untestable until byte `[30]` was decoded (see "Phase readback" above) — with no
+way to observe the flag after a recall, phase could only be assumed. It is
+*not* live-only despite sharing a byte range with mute, so do not generalise
+from the mute finding to phase. Confirmed twice, independently:
+
+1. *Recall test.* CH3 was saved into M3 as normal; flipped it live to inverted,
+   recalled M3, read back → **normal**. A genuine restore, not a no-op — the
+   flag had actually been changed before the recall.
+2. *Power-cycle test.* With CH3/CH4 saved as normal, the user power-cycled the
+   DSP. On reconnect the device came up on M3 with **both rear channels still
+   normal**, confirming the flag lives in non-volatile preset storage rather
+   than merely being mirrored in RAM.
+
+Note the power-cycle test also shows mute's *boot* default is independent of
+the preset: CH1-8/CH10 came up unmuted and CH9 muted regardless of what M3
+held. That is power-on behaviour, not preset restoration — do not rely on it.
 
 ### Routing matrix write — SOLVED 2026-07-06 (CMD 0x20, per output row)
 

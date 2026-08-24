@@ -341,8 +341,8 @@ def preset_recall(
 ) -> None:
     """Recall (load) a preset slot (M1-M6) onto the device. **Dry-run unless `--commit`.**
 
-    Restores gain, delay, HPF/LPF, speaker type, and EQ — **not** mute,
-    EQ-pass, or routing, which are live-only state a recall never touches.
+    Restores gain, delay, HPF/LPF, speaker type, EQ, and phase invert — **not**
+    mute, EQ-pass, or routing, which are live-only state a recall never touches.
     A channel muted or EQ-bypassed before the recall stays that way after it,
     regardless of what the slot was saved with. Re-set those explicitly if
     the slot's channels need to come back unmuted/EQ-engaged."""
