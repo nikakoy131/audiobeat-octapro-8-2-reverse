@@ -25,7 +25,7 @@ def run_monitor(interval: float = 0.5) -> int:
 
     def _snap(block) -> dict:
         active_eq = sum(
-            1 for b in block.eq_bands if b.gain_db is not None and abs(b.gain_db) > 0.05
+            1 for b in block.eq_bands if abs(b.gain_db) > 0.05
         )
         return {
             "speaker": block.speaker_type_byte,

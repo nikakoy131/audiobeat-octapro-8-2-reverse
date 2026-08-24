@@ -48,7 +48,7 @@ def run_parse_dat(path: Path, channel: int | None = None) -> int:
     table.add_column("EQ active", width=12)
 
     for ch in channels:
-        active = [b for b in ch.eq_bands if b.gain_db is not None and abs(b.gain_db) > 0.05]
+        active = [b for b in ch.eq_bands if abs(b.gain_db) > 0.05]
         eq_str = f"{len(active)} band(s)" if active else "flat"
         lpf_str = "bypass" if abs(ch.lpf_freq_hz - LPF_BYPASS_HZ) < 100 else f"{ch.lpf_freq_hz:.1f}"
         hpf_str = f"{ch.hpf_freq_hz:.1f}" if ch.hpf_freq_hz > 10 else f"~{ch.hpf_freq_hz:.1f} (?)"
