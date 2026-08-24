@@ -1,6 +1,6 @@
 import struct
 
-from octapro.protocol.channel import BLOCK_LEN, parse_channel_block
+from octapro.protocol.channel import BLOCK_LEN, PHASE_INVERT_OFFSET, parse_channel_block
 
 
 def _build_block(
@@ -12,11 +12,14 @@ def _build_block(
     delay_ms: float = 1.5,
     speaker_type: int = 0x06,
     muted: bool = False,
+    phase_inverted: bool = False,
 ) -> bytes:
     data = bytearray(BLOCK_LEN)
     data[0] = 0x00  # prefix
-    # routing [1:31] — zeros (no inputs routed); byte 29 doubles as the mute flag
+    # routing [1:31] — zeros (no inputs routed); byte 29 doubles as the mute
+    # flag, byte 30 (last byte of this range) doubles as the phase-invert flag
     data[29] = 1 if muted else 0
+    data[30] = 1 if phase_inverted else 0
     struct.pack_into("<f", data, 31, gain_db)
     struct.pack_into("<f", data, 35, delay_ms)
     struct.pack_into("<f", data, 39, hpf_hz)
@@ -106,6 +109,102 @@ class TestParseChannelBlock:
         raw = _build_block(muted=False)
         block = parse_channel_block(raw, ch=1)
         assert block.muted is False
+
+    def test_phase_invert_flag_set(self):
+        raw = _build_block(phase_inverted=True)
+        block = parse_channel_block(raw, ch=1)
+        assert block.phase_inverted is True
+
+    def test_phase_invert_flag_clear(self):
+        raw = _build_block(phase_inverted=False)
+        block = parse_channel_block(raw, ch=1)
+        assert block.phase_inverted is False
+
+
+class TestChannelPhaseInvertLive:
+    """Live-captured 2026-08-24 (subwoofer channels, M3 preset): raw READ_BLOCK
+    payloads taken immediately before/after `write phase --invert` / `--normal`
+    with no other write in between. On both CH7 and CH8 exactly two bytes move:
+    [30] (0x00 <-> 0x01) and the [239] checksum-like trailer — the same pattern
+    already established for the mute flag at [29] and for the master-block
+    preset slot at [7].
+
+    The device answers with 248 bytes; these fixtures are trimmed to BLOCK_LEN
+    (242) — the extra 6 bytes are zero padding. Note the trailer is also
+    channel-dependent (CH7 normal 0xd1, CH8 normal 0xd2) even though the two
+    channels' blocks are otherwise byte-identical here, so [239] is not a pure
+    function of the block contents.
+    """
+
+    CH7_INVERTED = bytes.fromhex(
+        "00b2b2808080800000b2b2808080800000b2b2b2b2b2b23232b2b23232000100"
+        "000000000000000000b04105000000a042030001030000a041780a0000c84178"
+        "0a0000fc41780a00002042a00f00004842780a00007c42780a0000a042780a00"
+        "00c842780a0000fa42780a00002043780a00004843780a00007a43780a00809d"
+        "43780a0000c843780a0000fa43780a00801d44780a00004844780a00007a4478"
+        "0a00409c44780a0000c844780a0000fa44780a00401c45780a00e04445780a00"
+        "007a45780a00409c45780a00e0c445780a0000fa45780a00401c46780a005043"
+        "46780a00007a46780a00409c46780ad20000"
+    )
+    CH7_NORMAL = bytes.fromhex(
+        "00b2b2808080800000b2b2808080800000b2b2b2b2b2b23232b2b23232000000"
+        "000000000000000000b04105000000a042030001030000a041780a0000c84178"
+        "0a0000fc41780a00002042a00f00004842780a00007c42780a0000a042780a00"
+        "00c842780a0000fa42780a00002043780a00004843780a00007a43780a00809d"
+        "43780a0000c843780a0000fa43780a00801d44780a00004844780a00007a4478"
+        "0a00409c44780a0000c844780a0000fa44780a00401c45780a00e04445780a00"
+        "007a45780a00409c45780a00e0c445780a0000fa45780a00401c46780a005043"
+        "46780a00007a46780a00409c46780ad10000"
+    )
+    CH8_INVERTED = bytes.fromhex(
+        "00b2b2808080800000b2b2808080800000b2b2b2b2b2b23232b2b23232000100"
+        "000000000000000000b04105000000a042030001030000a041780a0000c84178"
+        "0a0000fc41780a00002042a00f00004842780a00007c42780a0000a042780a00"
+        "00c842780a0000fa42780a00002043780a00004843780a00007a43780a00809d"
+        "43780a0000c843780a0000fa43780a00801d44780a00004844780a00007a4478"
+        "0a00409c44780a0000c844780a0000fa44780a00401c45780a00e04445780a00"
+        "007a45780a00409c45780a00e0c445780a0000fa45780a00401c46780a005043"
+        "46780a00007a46780a00409c46780ad30000"
+    )
+    CH8_NORMAL = bytes.fromhex(
+        "00b2b2808080800000b2b2808080800000b2b2b2b2b2b23232b2b23232000000"
+        "000000000000000000b04105000000a042030001030000a041780a0000c84178"
+        "0a0000fc41780a00002042a00f00004842780a00007c42780a0000a042780a00"
+        "00c842780a0000fa42780a00002043780a00004843780a00007a43780a00809d"
+        "43780a0000c843780a0000fa43780a00801d44780a00004844780a00007a4478"
+        "0a00409c44780a0000c844780a0000fa44780a00401c45780a00e04445780a00"
+        "007a45780a00409c45780a00e0c445780a0000fa45780a00401c46780a005043"
+        "46780a00007a46780a00409c46780ad20000"
+    )
+
+    def test_fixture_lengths(self):
+        for raw in (self.CH7_INVERTED, self.CH7_NORMAL, self.CH8_INVERTED, self.CH8_NORMAL):
+            assert len(raw) == BLOCK_LEN
+
+    def test_ch7_only_flag_and_trailer_differ(self):
+        diffs = [i for i in range(BLOCK_LEN) if self.CH7_INVERTED[i] != self.CH7_NORMAL[i]]
+        assert diffs == [PHASE_INVERT_OFFSET, 239]
+
+    def test_ch8_only_flag_and_trailer_differ(self):
+        diffs = [i for i in range(BLOCK_LEN) if self.CH8_INVERTED[i] != self.CH8_NORMAL[i]]
+        assert diffs == [PHASE_INVERT_OFFSET, 239]
+
+    def test_inverted_decodes_true(self):
+        assert parse_channel_block(self.CH7_INVERTED, ch=7).phase_inverted is True
+        assert parse_channel_block(self.CH8_INVERTED, ch=8).phase_inverted is True
+
+    def test_normal_decodes_false(self):
+        assert parse_channel_block(self.CH7_NORMAL, ch=7).phase_inverted is False
+        assert parse_channel_block(self.CH8_NORMAL, ch=8).phase_inverted is False
+
+    def test_phase_flag_does_not_disturb_the_rest_of_the_decode(self):
+        inv = parse_channel_block(self.CH7_INVERTED, ch=7)
+        norm = parse_channel_block(self.CH7_NORMAL, ch=7)
+        # 80 Hz / 24 dB LR high-pass, the M3 sub tune — unchanged by the flag
+        assert abs(inv.hpf_freq_hz - norm.hpf_freq_hz) < 0.01
+        assert inv.gain_db == norm.gain_db
+        assert inv.delay_ms == norm.delay_ms
+        assert inv.muted is False and norm.muted is False
 
 
 class TestParseMasterBlock:

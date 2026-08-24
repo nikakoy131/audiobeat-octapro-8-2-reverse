@@ -13,6 +13,7 @@ WarnFn = Callable[[str, object, str], None]
 BLOCK_LEN = 242
 EQ_BLOCK_OFFSET = 53  # byte 53 of the data payload
 MUTE_FLAG_OFFSET = 29  # 0 = unmuted, 1 = muted (docs/findings/BLE.md "Per-channel mute")
+PHASE_INVERT_OFFSET = 30  # 0 = normal (0deg), 1 = inverted (180deg) -- see below
 
 MASTER_BLOCK_LEN = 137
 MASTER_PRESET_SLOT_OFFSET = 7  # u8, active preset slot 1..6 (M1..M6) — see below
@@ -114,6 +115,7 @@ class ChannelBlock:
     speaker_type_byte: int
     eq_bands: list[EqBand]
     muted: bool
+    phase_inverted: bool
     # Bytes not yet understood — logged for research
     unknown_bytes: dict[str, str] = field(default_factory=dict)
 
@@ -132,8 +134,15 @@ def parse_channel_block(
       [1:31]    routing matrix (30 bytes, device read-format); byte 29 within
                 this range doubles as the MUTE flag (0=unmuted, 1=muted) —
                 live-verified over BLE on CH1/CH3/CH4/CH6, docs/findings/BLE.md
-                "Per-channel mute". Byte 239 is a trailing block checksum that
-                tracks it but is not decoded here.
+                "Per-channel mute". Byte 30 (the last byte of this range)
+                doubles as the PHASE INVERT flag (0=normal/0deg,
+                1=inverted/180deg) — live-verified 2026-08-24: captured raw
+                CH7 and CH8 blocks before/after `write phase --invert` /
+                `--normal` with no other write in between; only [30] and the
+                [239] trailing checksum-like byte changed on both channels
+                (same pattern as the mute flag at [29] and the master-block
+                preset-slot finding). Byte 239 tracks both flags but is not
+                decoded here.
       [31:35]   float32 LE per-channel GAIN (dB)
       [35:39]   float32 LE per-channel DELAY (ms)
       [39:43]   float32 LE HPF freq (Hz)
@@ -181,6 +190,7 @@ def parse_channel_block(
     speaker_type = _u8(52)
 
     muted = _u8(MUTE_FLAG_OFFSET) == 1
+    phase_inverted = _u8(PHASE_INVERT_OFFSET) == 1
 
     eq_bands = parse_eq_block(raw, offset=EQ_BLOCK_OFFSET, warn=warn)
 
@@ -205,5 +215,6 @@ def parse_channel_block(
         speaker_type_byte=speaker_type,
         eq_bands=eq_bands,
         muted=muted,
+        phase_inverted=phase_inverted,
         unknown_bytes=unknowns,
     )

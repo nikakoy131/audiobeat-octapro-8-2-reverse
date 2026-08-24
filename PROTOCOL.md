@@ -257,6 +257,8 @@ Used in both the **USB channel readback** (CMD 0x05 response) and the **.dat pre
 ```
 [0]      prefix byte (0x00)
 [1:31]   routing matrix — 30 bytes (device read-format; NOT the CMD 0x20 write)
+  [29]     doubles as the MUTE flag        (0 = unmuted, 1 = muted)
+  [30]     doubles as the PHASE INVERT flag (0 = 0°, 1 = 180°) ← decoded 2026-08-24
 [31:35]  float32 LE  per-channel GAIN (dB)          ← decoded 2026-07-06
 [35:39]  float32 LE  per-channel DELAY (ms)         ← decoded 2026-07-06
 [39:43]  float32 LE  HPF frequency (Hz)
@@ -924,6 +926,38 @@ shared `channel_addr` addressing.
 
 CLI: `write phase --channel <n> --invert|--normal --commit`. Builder:
 `packet.build_phase(ch, invert)`.
+
+#### Phase readback — SOLVED 2026-08-24 (channel block byte [30])
+
+Until now phase was write-only from the CLI's point of view: you could set it
+but not ask the device what it was. It is readable — the flag lives at **byte
+[30] of the 242-byte channel block**, the last byte of the range previously
+catalogued wholesale as "routing matrix", exactly mirroring the mute flag at
+[29].
+
+Method (same before/after byte-diff used for the master preset slot at [7]):
+capture a raw READ_BLOCK payload, send *only* `write phase --invert`, capture
+again, diff. Confirmed independently on CH7 and CH8:
+
+```
+CH7  --invert → --normal :  [30] 01 → 00 ,  [239] d2 → d1
+CH8  --invert → --normal :  [30] 01 → 00 ,  [239] d3 → d2
+```
+
+Exactly two bytes move on each channel; everything else — routing, gain, delay,
+HPF/LPF, speaker type, all 31 EQ bands — is byte-identical. `0x01` = 180°
+(inverted), `0x00` = 0° (normal).
+
+The [239] trailer tracks the flag additively (+1 when the flag sets), and is
+*also* channel-dependent: CH7-normal and CH8-normal hold the same 242 bytes
+apart from [239] (0xd1 vs 0xd2), so [239] is not a pure checksum over the block
+contents — the channel index feeds into it. Still not decoded; not needed for
+readback.
+
+Decoder: `ChannelBlock.phase_inverted` (`PHASE_INVERT_OFFSET = 30` in
+`protocol/channel.py`). Surfaced as the "Phase" row of `read channel <n>`.
+Regression fixtures: `TestChannelPhaseInvertLive` in `tests/test_channel.py`
+holds all four real captures.
 
 ### Bridge CH7+CH8 — SOLVED 2026-07-06 (CMD 0x1c, not a channel flag)
 

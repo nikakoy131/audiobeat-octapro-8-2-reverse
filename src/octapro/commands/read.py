@@ -227,6 +227,7 @@ def _read_and_print(transport, ch: int, show_eq: bool = False) -> None:
     table.add_column("Value")
     table.add_row("Speaker type", speaker_str)
     table.add_row("Gain", f"{block.gain_db:+.1f} dB")
+    table.add_row("Phase", "180° (inverted)" if block.phase_inverted else "0° (normal)")
     table.add_row("Delay", f"{block.delay_ms:.2f} ms")
     table.add_row("HPF freq", hpf_str)
     table.add_row("HPF slope", _slope_type(block.hpf_slope_byte, block.hpf_type_byte))
