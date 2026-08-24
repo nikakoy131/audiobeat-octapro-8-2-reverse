@@ -554,18 +554,52 @@ CLI: `octaproctl read knob-vol`.
 
 | Offset | Type | Field |
 |---|---|---|
-| `[0:9]` | bytes | prefix `00 55 55 55 55 55 00 02 01` |
+| `[0:7]` | bytes | prefix `00 55 55 55 55 55 00` |
+| `[7]` | u8 | **active preset slot (1..6 = M1..M6)** — see below |
+| `[8]` | u8 | `0x01` in every sample so far — unconfirmed constant |
 | `[9:13]` | float32 LE | **main volume dB** — the shared master register |
 | `[13:27]` | — | unknown (zeros in both dumps) |
 | `[27:31]` | float32 LE | **noise gate threshold dB** — `−88.0`; matches the factory "Noise gate threshold" dialog (manual p.9, "factory set, do not operate by yourself") |
 | `[31:94]` | — | unknown — two `01 00 02 00 04 00 … 80 00` bit patterns |
 | `[94]` | u8 | firmware string length (`0x27` = 39) |
 | `[95:134]` | ASCII | firmware banner |
-| `[134]` | u8 | varies between reads — checksum-like |
+| `[134]` | u8 | varies between reads — checksum-like, tracks `[7]` (see below) |
 | `[135:137]` | — | zeros |
 
 Cross-checked: live read 2026-07-05 vs usb1.pcapng frame 162 (vendor app on
 Windows) — identical except the volume float and `[134]`.
+
+**Active preset slot (LIVE-CONFIRMED 2026-08-24)**: byte `[7]` was previously
+catalogued as part of a static 9-byte prefix, on the strength of a single
+2026-07-04 dump that happened to be `0x02`. Re-tested live: captured a full
+`read master` (raw, not just the decoded fields), asked the user to switch
+the physical RC from M2 to M1 with **no other device command sent** in
+between, then captured `read master` again and byte-diffed the two 137-byte
+payloads. Only two bytes changed:
+
+```
+offset [7]:   0x02 -> 0x01   (M2 -> M1)
+offset [134]: 0xe6 -> 0xe5   (trailer tracks it, consistent with a simple
+                               additive checksum that includes [7])
+```
+
+The keepalive packet (separately captured in the same before/after pair) was
+byte-identical both times — the slot number is **not** echoed there, only in
+the CH0/master block. This resolves the original mystery of how the RC
+displays "current preset" with no documented read-back command: it's reading
+this same master block, at an offset nobody had previously varied while
+sampling.
+
+Caveats: this is a *live snapshot* of whichever slot was last **recalled**
+(by the RC or `preset recall`) — it says nothing about slots recalled before
+the device was last power-cycled if the register doesn't persist across
+power loss (untested), and it does **not** confirm live state still matches
+that slot's saved content if anything has been hand-edited since the recall
+(recall pins state once, at the moment it fires; this byte doesn't track
+drift afterward). `octaproctl read master` now decodes and displays it as
+"Active preset slot". See `protocol/channel.py::MASTER_PRESET_SLOT_OFFSET`
+and `tests/test_channel.py::TestMasterBlockPresetSlotLive` (real before/after
+fixtures from this test).
 
 CLI: `octaproctl read master`.
 

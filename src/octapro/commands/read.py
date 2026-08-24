@@ -91,6 +91,14 @@ def run_read_master(no_keepalive: bool = False) -> int:
             table = Table(title="Master (CH0)", show_header=False, min_width=44)
             table.add_column("Field", style="bold")
             table.add_column("Value")
+            slot_str = (
+                f"M{block.preset_slot}"
+                if block.preset_slot in range(1, 7)
+                else f"0x{block.preset_slot:02x} (unexpected)"
+            )
+            table.add_row(
+                "Active preset slot", f"{slot_str}  (last recalled — see note*)"
+            )
             table.add_row(
                 "Master volume", f"{block.volume_db:+.2f} dB  (Main fader = remote knob)"
             )
@@ -98,6 +106,11 @@ def run_read_master(no_keepalive: bool = False) -> int:
             table.add_row("Firmware", block.firmware or "(not present)")
             table.add_row("Status / dlen", f"0x{ip.status:04x} / {ip.data_len}")
             console.print(table)
+            console.print(
+                "[dim]* reflects the slot last recalled via `preset recall` or the RC; "
+                "does not confirm live state still matches that slot's saved content "
+                "if anything has been edited since.[/dim]"
+            )
 
             console.print("[bold]Raw block:[/bold]")
             for i in range(0, ip.data_len, 16):

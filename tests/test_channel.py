@@ -143,3 +143,50 @@ class TestParseMasterBlock:
 
         block = parse_master_block(self.LIVE_BLOCK)
         assert block.firmware == "A239-A-DP603-U5.6-250110-DSP1452-BMP885"
+
+    def test_preset_slot(self):
+        # byte [7] = 0x02 in this fixture -> M2 was the active slot on 2026-07-04
+        from octapro.protocol.channel import parse_master_block
+
+        block = parse_master_block(self.LIVE_BLOCK)
+        assert block.preset_slot == 2
+
+
+class TestMasterBlockPresetSlotLive:
+    """Live-captured 2026-08-24: raw `read master` before/after switching the RC
+    from M2 to M1 with no other device command sent in between. The two captures
+    differ only at offset [7] (0x02 -> 0x01) and the [134] checksum-like trailer
+    (0xe6 -> 0xe5) — confirms [7] is the active preset slot, not a static prefix
+    byte as previously catalogued."""
+
+    M2_BLOCK = bytes.fromhex(
+        "005555555555000201000098c100000000000000000000000000000000b0c2"
+        "00000001010001000200040008001000200040008000000100020100020000"
+        "030101ffff03000001000200040008001000200040008000000100020000000027"
+        "413233392d412d44503630332d55352e362d3235303131302d445350313435322d"
+        "424d50383835e60000"
+    )[:137]
+
+    M1_BLOCK = bytes.fromhex(
+        "005555555555000101000098c100000000000000000000000000000000b0c2"
+        "00000001010001000200040008001000200040008000000100020100020000"
+        "030101ffff03000001000200040008001000200040008000000100020000000027"
+        "413233392d412d44503630332d55352e362d3235303131302d445350313435322d"
+        "424d50383835e50000"
+    )[:137]
+
+    def test_m2_capture(self):
+        from octapro.protocol.channel import parse_master_block
+
+        assert parse_master_block(self.M2_BLOCK).preset_slot == 2
+
+    def test_m1_capture(self):
+        from octapro.protocol.channel import parse_master_block
+
+        assert parse_master_block(self.M1_BLOCK).preset_slot == 1
+
+    def test_only_slot_and_trailer_differ(self):
+        diffs = [
+            i for i in range(137) if self.M2_BLOCK[i] != self.M1_BLOCK[i]
+        ]
+        assert diffs == [7, 134]
