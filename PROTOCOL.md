@@ -257,6 +257,8 @@ Used in both the **USB channel readback** (CMD 0x05 response) and the **.dat pre
 ```
 [0]      prefix byte (0x00)
 [1:31]   routing matrix — 30 bytes (device read-format; NOT the CMD 0x20 write)
+  [29]     doubles as the MUTE flag        (0 = unmuted, 1 = muted)
+  [30]     doubles as the PHASE INVERT flag (0 = 0°, 1 = 180°) ← decoded 2026-08-24
 [31:35]  float32 LE  per-channel GAIN (dB)          ← decoded 2026-07-06
 [35:39]  float32 LE  per-channel DELAY (ms)         ← decoded 2026-07-06
 [39:43]  float32 LE  HPF frequency (Hz)
@@ -554,18 +556,52 @@ CLI: `octaproctl read knob-vol`.
 
 | Offset | Type | Field |
 |---|---|---|
-| `[0:9]` | bytes | prefix `00 55 55 55 55 55 00 02 01` |
+| `[0:7]` | bytes | prefix `00 55 55 55 55 55 00` |
+| `[7]` | u8 | **active preset slot (1..6 = M1..M6)** — see below |
+| `[8]` | u8 | `0x01` in every sample so far — unconfirmed constant |
 | `[9:13]` | float32 LE | **main volume dB** — the shared master register |
 | `[13:27]` | — | unknown (zeros in both dumps) |
 | `[27:31]` | float32 LE | **noise gate threshold dB** — `−88.0`; matches the factory "Noise gate threshold" dialog (manual p.9, "factory set, do not operate by yourself") |
 | `[31:94]` | — | unknown — two `01 00 02 00 04 00 … 80 00` bit patterns |
 | `[94]` | u8 | firmware string length (`0x27` = 39) |
 | `[95:134]` | ASCII | firmware banner |
-| `[134]` | u8 | varies between reads — checksum-like |
+| `[134]` | u8 | varies between reads — checksum-like, tracks `[7]` (see below) |
 | `[135:137]` | — | zeros |
 
 Cross-checked: live read 2026-07-05 vs usb1.pcapng frame 162 (vendor app on
 Windows) — identical except the volume float and `[134]`.
+
+**Active preset slot (LIVE-CONFIRMED 2026-08-24)**: byte `[7]` was previously
+catalogued as part of a static 9-byte prefix, on the strength of a single
+2026-07-04 dump that happened to be `0x02`. Re-tested live: captured a full
+`read master` (raw, not just the decoded fields), asked the user to switch
+the physical RC from M2 to M1 with **no other device command sent** in
+between, then captured `read master` again and byte-diffed the two 137-byte
+payloads. Only two bytes changed:
+
+```
+offset [7]:   0x02 -> 0x01   (M2 -> M1)
+offset [134]: 0xe6 -> 0xe5   (trailer tracks it, consistent with a simple
+                               additive checksum that includes [7])
+```
+
+The keepalive packet (separately captured in the same before/after pair) was
+byte-identical both times — the slot number is **not** echoed there, only in
+the CH0/master block. This resolves the original mystery of how the RC
+displays "current preset" with no documented read-back command: it's reading
+this same master block, at an offset nobody had previously varied while
+sampling.
+
+Caveats: this is a *live snapshot* of whichever slot was last **recalled**
+(by the RC or `preset recall`) — it says nothing about slots recalled before
+the device was last power-cycled if the register doesn't persist across
+power loss (untested), and it does **not** confirm live state still matches
+that slot's saved content if anything has been hand-edited since the recall
+(recall pins state once, at the moment it fires; this byte doesn't track
+drift afterward). `octaproctl read master` now decodes and displays it as
+"Active preset slot". See `protocol/channel.py::MASTER_PRESET_SLOT_OFFSET`
+and `tests/test_channel.py::TestMasterBlockPresetSlotLive` (real before/after
+fixtures from this test).
 
 CLI: `octaproctl read master`.
 
@@ -706,6 +742,41 @@ same companion seen with bridge) and then re-reads every channel to repaint its
 UI — but the **device applies the preset on this single 0x08 packet**. Builders
 `packet.build_preset_save(slot)` / `build_preset_recall(slot)`; CLI `preset
 save --slot N` / `preset recall --slot N`.
+
+**Scope of what recall restores (LIVE-CONFIRMED 2026-08-24): mute and EQ-pass
+are NOT part of the preset — they're independent runtime toggles.** Test: with
+CH1-4 muted and CH5-8 unmuted live (unrelated to either slot's saved content),
+recalled M2 then M3 in sequence — gain, delay, HPF/LPF, speaker type, and EQ
+band content all correctly switched to match each slot on every recall
+(confirmed via full channel readback), but the **mute pattern from before the
+first recall persisted unchanged through both recalls**. Same story for
+EQ-pass: nothing in either recall re-engaged a channel that had been left
+EQ-bypassed live. This matches `preset_io.py`'s existing note that `.dat`
+import/export also excludes routing — the pattern holds more broadly: **only
+per-channel gain/delay/HPF/LPF/speaker-type/EQ/phase round-trip through a
+preset (file or M-slot); mute, EQ-pass, and routing are all live-only state
+a recall does not touch.** Practical implication: after any `preset recall`,
+explicitly re-set mute/EQ-pass to the desired state — don't assume the recalled
+slot's channels come back unmuted/EQ-engaged just because that's how they were
+when the slot was saved.
+
+**Phase invert IS part of the preset (LIVE-CONFIRMED 2026-08-24).** This was
+untestable until byte `[30]` was decoded (see "Phase readback" above) — with no
+way to observe the flag after a recall, phase could only be assumed. It is
+*not* live-only despite sharing a byte range with mute, so do not generalise
+from the mute finding to phase. Confirmed twice, independently:
+
+1. *Recall test.* CH3 was saved into M3 as normal; flipped it live to inverted,
+   recalled M3, read back → **normal**. A genuine restore, not a no-op — the
+   flag had actually been changed before the recall.
+2. *Power-cycle test.* With CH3/CH4 saved as normal, the user power-cycled the
+   DSP. On reconnect the device came up on M3 with **both rear channels still
+   normal**, confirming the flag lives in non-volatile preset storage rather
+   than merely being mirrored in RAM.
+
+Note the power-cycle test also shows mute's *boot* default is independent of
+the preset: CH1-8/CH10 came up unmuted and CH9 muted regardless of what M3
+held. That is power-on behaviour, not preset restoration — do not rely on it.
 
 ### Routing matrix write — SOLVED 2026-07-06 (CMD 0x20, per output row)
 
@@ -873,6 +944,38 @@ shared `channel_addr` addressing.
 
 CLI: `write phase --channel <n> --invert|--normal --commit`. Builder:
 `packet.build_phase(ch, invert)`.
+
+#### Phase readback — SOLVED 2026-08-24 (channel block byte [30])
+
+Until now phase was write-only from the CLI's point of view: you could set it
+but not ask the device what it was. It is readable — the flag lives at **byte
+[30] of the 242-byte channel block**, the last byte of the range previously
+catalogued wholesale as "routing matrix", exactly mirroring the mute flag at
+[29].
+
+Method (same before/after byte-diff used for the master preset slot at [7]):
+capture a raw READ_BLOCK payload, send *only* `write phase --invert`, capture
+again, diff. Confirmed independently on CH7 and CH8:
+
+```
+CH7  --invert → --normal :  [30] 01 → 00 ,  [239] d2 → d1
+CH8  --invert → --normal :  [30] 01 → 00 ,  [239] d3 → d2
+```
+
+Exactly two bytes move on each channel; everything else — routing, gain, delay,
+HPF/LPF, speaker type, all 31 EQ bands — is byte-identical. `0x01` = 180°
+(inverted), `0x00` = 0° (normal).
+
+The [239] trailer tracks the flag additively (+1 when the flag sets), and is
+*also* channel-dependent: CH7-normal and CH8-normal hold the same 242 bytes
+apart from [239] (0xd1 vs 0xd2), so [239] is not a pure checksum over the block
+contents — the channel index feeds into it. Still not decoded; not needed for
+readback.
+
+Decoder: `ChannelBlock.phase_inverted` (`PHASE_INVERT_OFFSET = 30` in
+`protocol/channel.py`). Surfaced as the "Phase" row of `read channel <n>`.
+Regression fixtures: `TestChannelPhaseInvertLive` in `tests/test_channel.py`
+holds all four real captures.
 
 ### Bridge CH7+CH8 — SOLVED 2026-07-06 (CMD 0x1c, not a channel flag)
 

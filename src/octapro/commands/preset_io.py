@@ -77,7 +77,7 @@ def dat_channel_packets(ch: DatChannel, include_flat_eq: bool = True) -> list[tu
         out.append(
             (
                 f"CH{n} EQ band {band.index + 1}",
-                bytes(build_eq_band(n, band.index + 1, band.gain_db or 0.0, band.freq_hz, band.q)),
+                bytes(build_eq_band(n, band.index + 1, band.gain_db, band.freq_hz, band.q)),
             )
         )
     return out

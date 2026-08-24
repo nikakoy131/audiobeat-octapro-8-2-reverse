@@ -5,7 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from octapro.protocol.constants import EQ_BAND_COUNT, EQ_BAND_STRIDE, EQ_DEFAULT_Q_BYTE
-from octapro.protocol.gain import byte_to_db
+from octapro.protocol.gain import eq_byte_to_db
 
 WarnFn = Callable[[str, object, str], None]
 
@@ -29,7 +29,7 @@ def byte_to_q(b: int) -> float:
 class EqBand:
     index: int          # 0-based
     freq_hz: float
-    gain_db: float | None
+    gain_db: float
     gain_byte: int
     q_byte: int
 
@@ -62,7 +62,7 @@ def parse_eq_block(
         bands.append(EqBand(
             index=i,
             freq_hz=freq_hz,
-            gain_db=byte_to_db(gain_byte),
+            gain_db=eq_byte_to_db(gain_byte),
             gain_byte=gain_byte,
             q_byte=q_byte,
         ))

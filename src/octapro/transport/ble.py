@@ -31,6 +31,9 @@ NOTIFY_CHAR = "0000ae02-0000-1000-8000-00805f9b34fb"
 
 _CONNECT_TIMEOUT_S = 10.0
 _RESPONSE_TIMEOUT_S = 3.0
+# Pause after a fire-and-forget write so the device has settled before the
+# next command (scripts/ble_probe.py uses the same delay after session-open).
+_SETTLE_S = 0.4
 
 
 def _import_bleak() -> Any:
@@ -111,9 +114,13 @@ class BleTransport(KeepaliveMixin):
 
         self._run_coro(_connect())
         log.debug("Opened BLE device %s", self._address or self._name)
-        # The device refuses READ_BLOCK with an ee55 ACK until this is sent
-        resp = self.transact(bytes(build_session_open()))
-        log.debug("Session open ack: %s", resp[:4].hex(" "))
+        # The device refuses READ_BLOCK with an ee55 ACK until this is sent.
+        # Session-open is answered only by a 2-byte `eebb` ACK, which
+        # `is_ack_frame` filters out — so it must be written fire-and-forget,
+        # never via transact(), which would wait for a data frame that never
+        # comes and time out. Settle delay mirrors scripts/ble_probe.py.
+        self._write_only(bytes(build_session_open()))
+        log.debug("Session open sent (ack frame is filtered, not awaited)")
 
     def close(self) -> None:
         self._stop_keepalive()
@@ -155,6 +162,21 @@ class BleTransport(KeepaliveMixin):
         assert self._loop is not None
         future = asyncio.run_coroutine_threadsafe(coro, self._loop)
         return future.result()
+
+    def _write_only(self, payload: bytes) -> None:
+        """Write a packet to AE10 without waiting for a data response.
+
+        For commands the device answers with only a short ACK frame (which
+        `is_ack_frame` drops), so `transact()` would block until timeout.
+        """
+        short = payload.rstrip(b"\x00")
+
+        async def _write() -> None:
+            await self._client.write_gatt_char(WRITE_CHAR, short, response=True)
+            await asyncio.sleep(_SETTLE_S)
+
+        with self._lock:
+            self._run_coro(_write())
 
     def transact(self, payload: bytes) -> bytes:
         """Atomic send + recv, protected by lock (keepalive-safe).
