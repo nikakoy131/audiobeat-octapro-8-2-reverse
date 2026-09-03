@@ -354,8 +354,15 @@ CHANNEL_ADDR_STRIDE: Final = 0x0100
 GAIN_MUTE_BYTE: Final = 0x80
 GAIN_ZERO_BYTE: Final = 0x78
 
-# Keepalive interval (device disconnects if silent > ~1s)
+# Keepalive interval. The Windows app polls reg 0xa515 every ~500 ms over USB
+# (PROTOCOL.md "Keepalive"); whether the device actually drops the session
+# when it goes quiet has not been measured.
 KEEPALIVE_INTERVAL_S: Final = 0.45
+# Over BLE one keepalive round-trip is itself ~0.3-0.5 s (docs/findings/BLE.md
+# "Timing"), so the USB cadence would hog the link about half the time. 1 s
+# keeps the poll well below any plausible idle drop while leaving room for
+# real commands. Not yet soak-tested live over BLE.
+BLE_KEEPALIVE_INTERVAL_S: Final = 1.0
 
 # WRITE_DSP trailer at [14:16] — meaning unknown, consistently observed
 WRITE_DSP_TRAILER: Final = bytes([0x00, 0x10])
@@ -371,6 +378,10 @@ EQ_BAND_CENTERS_HZ: Final[list[float]] = [
 ]
 
 EQ_DEFAULT_Q_BYTE: Final = 0x0A
+# Plausible Q byte range: the manual gives Q = 0.4 .. 20, and q_byte = Q * 10.
+# Anything outside is a decode problem, not a user setting.
+EQ_Q_MIN_BYTE: Final = 0x04
+EQ_Q_MAX_BYTE: Final = 0xC8
 EQ_BAND_COUNT: Final = 31
 EQ_BAND_STRIDE: Final = 6
 

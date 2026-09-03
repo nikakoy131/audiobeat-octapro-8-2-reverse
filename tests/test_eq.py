@@ -48,14 +48,22 @@ class TestParseEqBlock:
         bands = parse_eq_block(block)
         assert len(bands) == 5
 
-    def test_warn_called_for_nondefault_q(self):
+    def test_no_warn_for_nondefault_but_plausible_q(self):
+        # Q = byte/10 is verified; a user-set Q (1.5, 2.0, 4.3, 20.0) is data,
+        # not an unknown — must not spam the research log on every read.
         warned: list[tuple] = []
-        first = (500.0, 0x78, 0x2B)  # non-default Q
-        rest = [(1000.0, 0x78, 0x0A)] * (EQ_BAND_COUNT - 1)
-        block = _make_block([first] + rest)
-        parse_eq_block(block, warn=lambda k, v, c: warned.append((k, v, c)))
-        assert len(warned) == 1
-        assert warned[0][0] == "eq_q_byte"
+        bands = [(500.0, 0x78, q) for q in (0x0F, 0x14, 0x2B, 0xC8, 0x04)]
+        rest = [(1000.0, 0x78, 0x0A)] * (EQ_BAND_COUNT - len(bands))
+        parse_eq_block(_make_block(bands + rest), warn=lambda k, v, c: warned.append((k, v, c)))
+        assert warned == []
+
+    def test_warn_called_for_implausible_q(self):
+        warned: list[tuple] = []
+        bands = [(500.0, 0x78, 0x00), (630.0, 0x78, 0xFF)]  # Q 0.0 and 25.5
+        rest = [(1000.0, 0x78, 0x0A)] * (EQ_BAND_COUNT - len(bands))
+        parse_eq_block(_make_block(bands + rest), warn=lambda k, v, c: warned.append((k, v, c)))
+        assert [w[0] for w in warned] == ["eq_q_byte", "eq_q_byte"]
+        assert [w[1] for w in warned] == ["0x00", "0xff"]
 
 
 def test_eq_band_0x80_is_plus_0p8_not_mute():
