@@ -241,3 +241,34 @@ and the reasoning notes.
   `octaproctl read master --transport ble` / `write master --transport ble` to
   reproduce them with the shipped CLI instead.
 - Optionally decode the CMD `0x90` car-preset table and the `01 fe` media namespace.
+
+## Timing (2026-09-03, from `research.jsonl` `packet_out`→`packet_in` pairs)
+
+Measured round-trips through the shipped `BleTransport` on macOS, one session
+of 28 transactions:
+
+| Request | Response size | Round-trip |
+|---|---|---|
+| handshake `0x04/0x9909`, firmware `0x04/0x80f0` | short | 135–175 ms |
+| `READ_BLOCK` (per-channel) | 240 B block | 290–550 ms, p50 ≈ 355 ms |
+
+USB for comparison: p50 ≈ 7 ms, worst ≈ 0.4 s.
+
+Latency scales with response size, which is what you'd expect from the
+`AE02` notifications being chunked at the bridge's MTU — a 240-byte block is
+~a dozen notifications at one per connection interval. Nobody has yet tried
+negotiating a larger MTU on this bridge; that is the obvious throughput win
+if `read all` ever needs to be faster.
+
+Consequences for the transport constants (`transport/ble.py`,
+`protocol/constants.py`):
+
+- `_RESPONSE_TIMEOUT_S = 5.0` — ~10× the worst observed round-trip, still
+  below a typical supervision timeout so a dead link fails fast. No
+  `TransportTimeout` has ever been logged over either transport.
+- `BLE_KEEPALIVE_INTERVAL_S = 1.0` (USB keeps the app's 0.45 s). A keepalive
+  is itself a ~0.3–0.5 s transaction over BLE, so at 0.45 s the keepalive
+  thread held the shared lock roughly half the time and every `read all`
+  was interleaved with ~10 keepalives. **Not yet soak-tested live** — the
+  claim that the device drops a quiet session after ~1 s was never
+  measured; if a long `monitor` over BLE starts refusing reads, halve this.

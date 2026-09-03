@@ -1,6 +1,11 @@
 import struct
 
-from octapro.protocol.channel import BLOCK_LEN, PHASE_INVERT_OFFSET, parse_channel_block
+from octapro.protocol.channel import (
+    BLOCK_LEN,
+    BLOCK_WIRE_LEN,
+    PHASE_INVERT_OFFSET,
+    parse_channel_block,
+)
 
 
 def _build_block(
@@ -74,6 +79,23 @@ class TestParseChannelBlock:
         kinds = [w[0] for w in warned]
         assert "hpf_slope_code" in kinds
 
+    def test_no_warn_for_wire_length_block(self):
+        # BLE delivers exactly the 240 bytes the device sends (no USB transfer
+        # padding) — that is a complete block, not a short one.
+        warned: list[tuple] = []
+        raw = _build_block(gain_db=-3.0, delay_ms=1.0)[:BLOCK_WIRE_LEN]
+        block = parse_channel_block(raw, ch=1, warn=lambda k, v, c: warned.append((k, v, c)))
+        assert [w[0] for w in warned] == []
+        assert block.gain_db == -3.0
+        assert block.delay_ms == 1.0
+        assert len(block.eq_bands) == 31
+
+    def test_warn_on_truncated_block(self):
+        warned: list[tuple] = []
+        raw = _build_block()[: BLOCK_WIRE_LEN - 1]
+        parse_channel_block(raw, ch=1, warn=lambda k, v, c: warned.append((k, v, c)))
+        assert ("short_block", BLOCK_WIRE_LEN - 1, f"ch=1 expected {BLOCK_WIRE_LEN}") in warned
+
     def test_routing_parsed(self):
         raw = _build_block()
         block = parse_channel_block(raw, ch=1)
@@ -129,8 +151,9 @@ class TestChannelPhaseInvertLive:
     already established for the mute flag at [29] and for the master-block
     preset slot at [7].
 
-    The device answers with 248 bytes; these fixtures are trimmed to BLOCK_LEN
-    (242) — the extra 6 bytes are zero padding. Note the trailer is also
+    Over USB the device answers with 248 bytes (240 real + GET_REPORT
+    padding); these fixtures are trimmed to BLOCK_LEN (242) — the extra
+    bytes are zero padding. Note the trailer is also
     channel-dependent (CH7 normal 0xd1, CH8 normal 0xd2) even though the two
     channels' blocks are otherwise byte-identical here, so [239] is not a pure
     function of the block contents.

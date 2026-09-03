@@ -1,4 +1,11 @@
-"""Decoder for the 242-byte per-channel block returned by CMD 0x05 READ_BLOCK."""
+"""Decoder for the per-channel block returned by CMD 0x05 READ_BLOCK.
+
+The device sends 240 bytes ([0:240], trailer at [239]). Over USB the
+GET_REPORT is a fixed 256-byte transfer so the payload arrives zero-padded to
+248; over BLE the frame is exactly the declared length and the payload is 240.
+`BLOCK_LEN` (242) is the padded layout the fixtures and `.dat` tooling use;
+`BLOCK_WIRE_LEN` is what the device actually guarantees.
+"""
 
 import struct
 from collections.abc import Callable
@@ -11,6 +18,7 @@ from octapro.protocol.routing import RoutingMatrix, parse_routing
 WarnFn = Callable[[str, object, str], None]
 
 BLOCK_LEN = 242
+BLOCK_WIRE_LEN = 240  # bytes the device actually sends; [240:242] is host-side padding
 EQ_BLOCK_OFFSET = 53  # byte 53 of the data payload
 MUTE_FLAG_OFFSET = 29  # 0 = unmuted, 1 = muted (docs/findings/BLE.md "Per-channel mute")
 PHASE_INVERT_OFFSET = 30  # 0 = normal (0deg), 1 = inverted (180deg) -- see below
@@ -156,7 +164,7 @@ def parse_channel_block(
                 because every prior sample happened to be 0x06 (FF)
       [53:239]  EQ data: 31 bands × 6 bytes
       [239]     trailing byte (varies per channel)
-      [240:242] padding zeros
+      [240:242] padding zeros (USB transfer padding only — not sent over BLE)
     """
     def _u8(i: int) -> int:
         return raw[i] if i < len(raw) else 0
@@ -164,8 +172,8 @@ def parse_channel_block(
     def _f32(i: int) -> float:
         return struct.unpack_from("<f", raw, i)[0] if i + 4 <= len(raw) else 0.0
 
-    if len(raw) < BLOCK_LEN and warn:
-        warn("short_block", len(raw), f"ch={ch} expected {BLOCK_LEN}")
+    if len(raw) < BLOCK_WIRE_LEN and warn:
+        warn("short_block", len(raw), f"ch={ch} expected {BLOCK_WIRE_LEN}")
 
     prefix = _u8(0)
     if prefix != 0x00 and warn:
