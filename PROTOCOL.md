@@ -1209,6 +1209,13 @@ high-level outstanding items:
 | `8d 00` (0x008d) | 137 B | master-channel read (CMD 0x05 SUB 0x0004) |
 | `f6 00` (0x00f6) | 242 B | per-channel read (CMD 0x05 SUB 0xNN04) |
 
+`dlen` is the header's declared length (addr + block). The channel *block* the
+parser sees is **240 bytes** (`channel.BLOCK_WIRE_LEN`); over USB the fixed
+256-byte GET_REPORT pads it with zeros, over BLE it arrives at exactly 240.
+`BLOCK_LEN` (242) is the padded layout used by fixtures/tooling. (Resolved
+2026-09-03 — the `short_block=240` research-log entries on every BLE read
+were this padding difference, not a truncated response.)
+
 ### CMD 0x05 sub 0x0101 / 0x0001 — RECLASSIFIED as per-channel mute (2026-07-06)
 
 **Superseded.** These were previously believed to be a "DSP commit trigger"

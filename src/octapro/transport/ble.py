@@ -18,6 +18,7 @@ import threading
 from typing import Any
 
 from octapro.errors import DeviceNotFound, TransportTimeout
+from octapro.protocol.constants import BLE_KEEPALIVE_INTERVAL_S
 from octapro.protocol.packet import build_session_open
 from octapro.transport.base import KeepaliveMixin
 from octapro.transport.ble_frame import expected_len, is_ack_frame, normalize_response
@@ -30,7 +31,11 @@ WRITE_CHAR = "0000ae10-0000-1000-8000-00805f9b34fb"
 NOTIFY_CHAR = "0000ae02-0000-1000-8000-00805f9b34fb"
 
 _CONNECT_TIMEOUT_S = 10.0
-_RESPONSE_TIMEOUT_S = 3.0
+# A 242-byte READ_BLOCK takes 0.3-0.55 s on this bridge (chunked notifications;
+# docs/findings/BLE.md "Timing"), so this is ~10x the worst observed round-trip
+# and still under a typical supervision timeout — a dead link surfaces here
+# rather than hanging until the OS notices.
+_RESPONSE_TIMEOUT_S = 5.0
 # Pause after a fire-and-forget write so the device has settled before the
 # next command (scripts/ble_probe.py uses the same delay after session-open).
 _SETTLE_S = 0.4
@@ -55,6 +60,8 @@ class BleTransport(KeepaliveMixin):
     blocks the caller until the reassembled response is ready, giving the
     same synchronous `transact(payload) -> bytes` contract as `HidTransport`.
     """
+
+    keepalive_interval_s = BLE_KEEPALIVE_INTERVAL_S
 
     def __init__(self, address: str | None = None, name: str = DEVICE_NAME) -> None:
         super().__init__()

@@ -43,6 +43,10 @@ class KeepaliveMixin:
     tick can never interleave with a command's send+recv.
     """
 
+    # Seconds between keepalive ticks. Transports override this to match
+    # their link speed (a BLE round-trip is ~100x slower than USB).
+    keepalive_interval_s: float = KEEPALIVE_INTERVAL_S
+
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._stop = threading.Event()
@@ -52,12 +56,13 @@ class KeepaliveMixin:
         raise NotImplementedError
 
     def start_keepalive(self) -> None:
-        """Start background thread that sends keepalive every ~450 ms."""
+        """Start background thread that sends keepalive every `keepalive_interval_s`."""
         pkt = bytes(build_keepalive())
         self._stop.clear()
+        interval = self.keepalive_interval_s
 
         def _loop() -> None:
-            while not self._stop.wait(KEEPALIVE_INTERVAL_S):
+            while not self._stop.wait(interval):
                 try:
                     self.transact(pkt)
                     log.debug("Keepalive sent")
@@ -70,7 +75,7 @@ class KeepaliveMixin:
             target=_loop, daemon=True, name="octapro-keepalive"
         )
         self._ka_thread.start()
-        log.debug("Keepalive thread started (interval=%.2fs)", KEEPALIVE_INTERVAL_S)
+        log.debug("Keepalive thread started (interval=%.2fs)", interval)
 
     def _stop_keepalive(self) -> None:
         self._stop.set()
