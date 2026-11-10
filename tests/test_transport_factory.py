@@ -7,6 +7,7 @@ installed, exactly like the rest of the offline test suite.
 """
 
 import octapro.transport as transport_mod
+from octapro.protocol.constants import BLE_KEEPALIVE_INTERVAL_S, KEEPALIVE_INTERVAL_S
 from octapro.transport import open_transport, resolve, set_override
 from octapro.transport.ble import BleTransport
 from octapro.transport.hid import HidTransport
@@ -48,6 +49,13 @@ class TestOpenTransportFactory:
         # constructing the instance must not require the `ble` extra.
         t = BleTransport(address="some-address")
         assert t._address == "some-address"
+
+    def test_keepalive_interval_is_per_transport(self):
+        # A BLE round-trip is ~0.3-0.5 s, so the USB cadence would hog the
+        # link; BLE must poll less often, and USB must keep the app's cadence.
+        assert HidTransport.keepalive_interval_s == KEEPALIVE_INTERVAL_S
+        assert BleTransport.keepalive_interval_s == BLE_KEEPALIVE_INTERVAL_S
+        assert BleTransport.keepalive_interval_s > HidTransport.keepalive_interval_s
 
     def test_set_override_module_state(self):
         set_override("ble", "xyz")

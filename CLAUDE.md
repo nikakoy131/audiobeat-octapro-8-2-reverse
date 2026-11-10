@@ -223,8 +223,11 @@ from import, see PROTOCOL.md ".dat / import-export").
 protocol over the `0xAE00` GATT bridge (see PROTOCOL.md / `docs/findings/BLE.md`
 "CMD over BLE"). Selected via `octaproctl ble connect` / `--transport ble`,
 persisted in a per-user JSON config (`octapro.config`) — see README.md
-"Transports". Optionally still open: CMD `0x90` car-preset table, `01 fe`
-media/U-disk namespace.
+"Transports". BLE is ~50× slower per transaction than USB (READ_BLOCK ≈
+0.3–0.55 s vs ≈ 7 ms; see docs/findings/BLE.md "Timing"), so the keepalive
+interval is per-transport (`KeepaliveMixin.keepalive_interval_s`: USB 0.45 s,
+BLE 1.0 s) and the BLE response timeout is 5 s. Optionally still open: CMD
+`0x90` car-preset table, `01 fe` media/U-disk namespace, BLE MTU negotiation.
 
 ## Analysis Tools (installed on this machine)
 
